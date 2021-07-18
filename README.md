@@ -9,7 +9,7 @@ In [util.py](https://github.com/lameski123/prethesis/blob/main/util.py) the impl
 In [test_model.py](https://github.com/lameski123/prethesis/blob/main/test_model.py) we produced test results on unseen data during training.
 
 Here is an example registration on our data:
-![alt text](https://drive.google.com/file/d/1wcsb_EG7Eodvju4BsVTB4nMf0tdg4X2G/view?usp=sharing)
+![alt text](https://github.com/lameski123/prethesis/blob/main/Screenshot%202021-07-18%20at%2014.26.30.png)
 yellow-source; blue-registration; red-target
 
 
