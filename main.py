@@ -97,32 +97,30 @@ def test_one_epoch(args, net, test_loader):
     total_acc3d_2 = 0
     num_examples = 0
     chamfer = chamferdist.ChamferDistance()
-    pc1_surf = torch.Tensor()
-    pc2_surf = torch.Tensor()
+
 
     for i, data in tqdm(enumerate(test_loader), total = len(test_loader)):
-        pc1, pc2, color1, color2, flow, mask1 = data
-        position1 = np.where(pc1[:, :, 6] == 1)[0]
-        ind1 = torch.tensor(position1).cuda()
-        position2 = np.where(pc2[:, :, 6] == 1)[0]
-        ind2 = torch.tensor(position2).cuda()
-
-        pc1 = pc1.cuda().transpose(2,1).contiguous()
-        pc2 = pc2.cuda().transpose(2,1).contiguous()
+        pc1, pc2, color1, color2, flow, mask1, position1, position2 = data
+        ind1 = position1.type(torch.int).cuda()
+        ind2 = position2.type(torch.int).cuda()
+        pc1_surf = torch.zeros_like(pc1).type(torch.int).cuda()
+        pc2_surf = torch.zeros_like(pc2).type(torch.int).cuda()
+        pc1 = pc1.cuda().transpose(2, 1).contiguous()
+        pc2 = pc2.cuda().transpose(2, 1).contiguous()
         color1 = color1.cuda().transpose(2, 1).contiguous().float()
         color2 = color2.cuda().transpose(2, 1).contiguous().float()
-        flow = flow.cuda()
+        flow = flow.cuda().contiguous()
         mask1 = mask1.cuda().float()
+
+        for i in range(pc1.shape[0]):
+            pc1_surf[i, :] = torch.index_select(pc1[i, :], 1, ind1[i, :]).transpose(1, 0).cuda()
+            pc2_surf[i, :] = torch.index_select(pc2[i, :], 1, ind2[i, :]).transpose(1, 0).cuda()
 
         batch_size = pc1.size(0)
         num_examples += batch_size
         flow_pred = net(pc1, pc2, color1, color2).permute(0, 2, 1)
-        # pc1_surf = torch.index_select(flow, 1, ind1).cuda()
-        # pc2_surf = torch.index_select(flow_pred, 1, ind1).cuda()
-        pc1_surf = torch.index_select(pc1, 1, ind1).cuda()
-        pc2_surf = torch.index_select(pc2, 1, ind2).cuda()
-        loss = torch.mean(mask1 * torch.sum((flow_pred - flow) ** 2, -1) / 2.0) + 5 * chamfer(pc1_surf, pc2_surf,
-                                                                                              bidirectional=True)
+        loss = torch.mean(mask1 * torch.sum((flow_pred - flow) ** 2, -1) / 2.0) + \
+                5 * chamfer(pc1_surf.type(torch.float), pc2_surf.type(torch.float), bidirectional=True)
 
         epe_3d, acc_3d, acc_3d_2 = scene_flow_EPE_np(flow_pred.detach().cpu().numpy(), flow.detach().cpu().numpy(),
                                                      mask1.detach().cpu().numpy())
@@ -142,33 +140,35 @@ def train_one_epoch(args, net, train_loader, opt):
     num_examples = 0
     total_loss = 0
     chamfer = chamferdist.ChamferDistance()
-
     for i, data in tqdm(enumerate(train_loader), total = len(train_loader)):
 
-        pc1, pc2, color1, color2, flow, mask1 = data
+        pc1, pc2, color1, color2, flow, mask1, position1, position2= data
 
-        position1 = np.where(pc1[:, :, 6] == 1)[0]
-        ind1 = torch.tensor(position1).cuda()
-        position2 = np.where(pc2[:, :, 6] == 1)[0]
-        ind2 = torch.tensor(position2).cuda()
 
-        pc1 = pc1.cuda().transpose(2,1).contiguous()
-        pc2 = pc2.cuda().transpose(2,1).contiguous()
+        ind1 = position1.type(torch.int).cuda()
+        ind2 = position2.type(torch.int).cuda()
+        pc1 = pc1.cuda().transpose(2, 1).contiguous()
+        pc2 = pc2.cuda().transpose(2, 1).contiguous()
         color1 = color1.cuda().transpose(2, 1).contiguous().float()
         color2 = color2.cuda().transpose(2, 1).contiguous().float()
         flow = flow.cuda().transpose(2, 1).contiguous()
         mask1 = mask1.cuda().float()
-
+        pc1_surf = torch.zeros_like(pc1).type(torch.int).cuda()
+        pc2_surf = torch.zeros_like(pc2).type(torch.int).cuda()
+        for i in range(pc1.shape[0]):
+            pc1_surf[i,:] = torch.index_select(pc1[i,:], 1, ind1[i, :]).cuda()#.transpose(1, 0).cuda()
+            pc2_surf[i,:] = torch.index_select(pc2[i,:], 1, ind2[i, :]).cuda()#.transpose(1, 0).cuda()
 
         batch_size = pc1.size(0)
         opt.zero_grad()
         num_examples += batch_size
         flow_pred = net(pc1, pc2, color1, color2)
 
-        pc1_surf = torch.index_select(pc1, 1, ind1).cuda()
-        pc2_surf = torch.index_select(pc2, 1, ind2).cuda()
-        loss = torch.mean(mask1 * torch.sum((flow_pred - flow) ** 2, 1) / 2.0) + 5*chamfer(pc1_surf, pc2_surf,
-                                                                                           bidirectional=True)
+        loss = torch.mean(mask1 * torch.sum((flow_pred - flow) ** 2, 1) / 2.0) + \
+               5 * chamfer(pc1_surf.type(torch.float).transpose(2,1),
+                           pc2_surf.type(torch.float).transpose(2,1),
+                           bidirectional=True)
+
         loss.backward()
 
         opt.step()
@@ -195,9 +195,9 @@ def train(args, net, train_loader, test_loader, boardio, textio):
         opt = optim.SGD(net.parameters(), lr=args.lr * 100, momentum=args.momentum, weight_decay=1e-4)
     else:
         print("Use Adam")
-        opt = optim.Adam(net.parameters(), lr=args.lr)
+        opt = optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-4)
     # scheduler = MultiStepLR(opt, milestones=[75, 150, 200], gamma=0.1)
-    scheduler = StepLR(opt, 40, gamma = 0.7)
+    scheduler = StepLR(opt, 5, gamma = 0.7)
 
     best_test_loss = np.inf
     for epoch in range(args.epochs):
@@ -211,13 +211,15 @@ def train(args, net, train_loader, test_loader, boardio, textio):
             best_test_loss = test_loss
             textio.cprint('best test loss till now: %f'%test_loss)
             if torch.cuda.device_count() > 1:
-                torch.save(net.module.state_dict(), 'checkpoints/%s/models/model_cross_val.best.t7' % args.exp_name)
+                torch.save(net.module.state_dict(), 'checkpoints/%s/models/model.best.t7' % args.exp_name)
             else:
-                torch.save(net.state_dict(), 'checkpoints/%s/models/model_cross_val.best.t7' % args.exp_name)
+                torch.save(net.state_dict(), 'checkpoints/%s/models/model.best.t7' % args.exp_name)
 
         scheduler.step()
         wandb.log({"Train loss": train_loss})
         wandb.log({"Val loss": test_loss})
+        # print(scheduler.get_last_lr())
+        args.lr = scheduler.get_last_lr()[0]
         # if torch.cuda.device_count() > 1:
         #     torch.save(net.module.state_dict(), 'checkpoints/%s/models/model.%d.t7' % (args.exp_name, epoch))
         # else:
@@ -225,50 +227,11 @@ def train(args, net, train_loader, test_loader, boardio, textio):
         # gc.collect()
         # return train_loss, test_loss
 
-
-class Sampler(Generic[T_co]):
-    r"""Base class for all Samplers.
-
-    Every Sampler subclass has to provide an :meth:`__iter__` method, providing a
-    way to iterate over indices of dataset elements, and a :meth:`__len__` method
-    that returns the length of the returned iterators.
-
-    .. note:: The :meth:`__len__` method isn't strictly required by
-              :class:`~torch.utils.data.DataLoader`, but is expected in any
-              calculation involving the length of a :class:`~torch.utils.data.DataLoader`.
-    """
-
-    def __init__(self, data_source: Optional[Sized]) -> None:
-        pass
-
-    def __iter__(self) -> Iterator[T_co]:
-        raise NotImplementedError
-
-
-class SubsetRandomSampler(Sampler[int]):
-    r"""Samples elements randomly from a given list of indices, without replacement.
-
-    Args:
-        indices (sequence): a sequence of indices
-        generator (Generator): Generator used in sampling.
-    """
-    indices: Sequence[int]
-
-    def __init__(self, indices: Sequence[int], generator=None) -> None:
-        self.indices = indices
-        self.generator = generator
-
-    def __iter__(self):
-        return (self.indices[i] for i in torch.randperm(len(self.indices), generator=self.generator))
-
-    def __len__(self):
-        return len(self.indices)
-
 if __name__ == '__main__':
     # main()
     args = {"exp_name":"flownet3d","emb_dims":512, "num_points":4096,
             "lr":0.001, "momentum":0.9,"seed":100, "dropout":0.5,
-            "batch_size":1, "test_batch_size":1, "epochs":50 ,
+            "batch_size":4, "test_batch_size":4, "epochs":25,
             "use_sgd":False, "eval":False, "cycle":False,
             "gaussian_noise":False}
     args = dotdict(args)
@@ -292,6 +255,7 @@ if __name__ == '__main__':
 
     net = FlowNet3D(args).cuda()
     net.apply(weights_init)
+    # net.load_state_dict(torch.load("./checkpoints/flownet3d/models/model.best.t7"))
     for fold, (tr_idx, val_idx) in enumerate(kf.split(dataset)):
         wandb.init(config=args)
         print("FOLD: ", fold)
@@ -299,10 +263,10 @@ if __name__ == '__main__':
         test_subsampler = torch.utils.data.SubsetRandomSampler(val_idx)
 
         train_loader = DataLoader(dataset,
-            batch_size=1, drop_last=True, sampler=train_subsampler)
+            batch_size=args.batch_size, drop_last=True, sampler=train_subsampler)
         test_loader = DataLoader(
             dataset,
-            batch_size=1,  drop_last=False, sampler=test_subsampler)
+            batch_size=args.batch_size,  drop_last=False, sampler=test_subsampler)
 
         if torch.cuda.device_count() > 1:
             net = nn.DataParallel(net)
@@ -310,7 +274,49 @@ if __name__ == '__main__':
         # wandb.watch(net, log_freq=100)
         train(args, net, train_loader, test_loader, boardio, textio)
 
-
+        #visualisation of each epoch:
+        pc1, pc2, color1, color2, flow, mask1, position1, position2 = next(iter(test_loader))
+        pc1 = pc1.cuda().transpose(2, 1).contiguous()
+        pc2 = pc2.cuda().transpose(2, 1).contiguous()
+        color1 = color1.cuda().transpose(2, 1).contiguous().float()
+        color2 = color2.cuda().transpose(2, 1).contiguous().float()
+        flow = flow.cuda().transpose(2, 1).contiguous()
+        mask1 = mask1.cuda().float()
+        flow_pred = net(pc1,pc2,color1, color2)
+        pc1 = pc1.transpose(1,2).detach().cpu().numpy()[0,:,:].squeeze()
+        pc2 = pc2.transpose(1,2).detach().cpu().numpy()[0,:,:].squeeze()
+        flow = flow.transpose(1,2).detach().cpu().numpy()[0,:,:].squeeze()
+        flow_min = flow.min()
+        flow_max = flow.max()
+        flow_pred = flow_pred.transpose(1,2).detach().cpu().numpy()[0,:,:].squeeze()
+        wandb.log({
+            "source": wandb.Object3D(
+                {
+                    "type": "lidar/beta",
+                    "points": pc1[:,:3]
+                }
+            )})
+        wandb.log({
+            "registered": wandb.Object3D(
+                {
+                    "type": "lidar/beta",
+                    "points": pc1[:,:3] + flow_pred
+                }
+            )})
+        wandb.log({
+            "target": wandb.Object3D(
+                {
+                    "type": "lidar/beta",
+                    "points": pc2[:,:3]
+                }
+            )})
+        wandb.log({
+            "sanity target check": wandb.Object3D(
+                {
+                    "type": "lidar/beta",
+                    "points": pc1[:,:3] + flow
+                }
+            )})
         wandb.join()
 
 

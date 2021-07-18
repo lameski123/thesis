@@ -11,8 +11,9 @@ from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
 from sklearn.neighbors import NearestNeighbors
 from scipy.spatial.distance import minkowski
-
-
+import torch
+from torch.utils.data import DataLoader
+import torch.nn.functional as F
 # Part of the code is referred from: https://github.com/charlesq34/pointnet
 
 def download():
@@ -157,16 +158,19 @@ class ModelNet40(Dataset):
 
 
 class SceneflowDataset(Dataset):
-    def __init__(self, npoints=4096, root='./point_clouds'):
+    def __init__(self, npoints=4096, root='./point_clouds_test', train=False):
         #train=1 take train part
         #train=2 take test part
         #train=0 take whole dataset
         self.npoints = npoints
 
         self.root = root
-        # self.train = train
+        self.train = train
         self.datapath = glob.glob(os.path.join(self.root, '*.npz'))
-
+        # if self.train == True:
+        #     self.datapath = self.datapath[:-8]
+        # else:
+        #     self.datapath = self.datapath[-8:]
         # self.cache = {}
         # self.cache_size = 30000
 
@@ -188,6 +192,7 @@ class SceneflowDataset(Dataset):
         # print(pos1.shape, pos2.shape, flow.shape)
         n1 = pos1.shape[0]
         n2 = pos2.shape[0]
+        np.random.seed(100)
         if n1 >= self.npoints:
             sample_idx1 = np.random.choice(n1, self.npoints, replace=False)
         else:
@@ -199,14 +204,29 @@ class SceneflowDataset(Dataset):
             sample_idx2 = np.concatenate((np.arange(n2), np.random.choice(n2, self.npoints - n2, replace=True)),
                                          axis=-1)
 
-        pos1_ = np.copy(pos1)[sample_idx1, :]
-        pos2_ = np.copy(pos2)[sample_idx2, :]
+        pos1_ = np.copy(pos1)[sample_idx1, :3]
+        pos2_ = np.copy(pos2)[sample_idx2, :3]
         flow_ = np.copy(flow)[sample_idx1, :]
-        color1 = np.zeros([self.npoints, 3])
-        color2 = np.zeros([self.npoints, 3])
-        mask = np.ones([self.npoints])
 
-        return pos1_, pos2_, color1, color2, flow_, mask
+        color1 = np.copy(pos1)[sample_idx1, 3:6]
+        color2 = np.copy(pos1)[sample_idx1, 3:6]
+        # color1 = np.zeros([self.npoints, 3])
+        # color2 = np.zeros([self.npoints, 3])
+        mask = np.ones([self.npoints])
+        surface1 = np.copy(pos1)[sample_idx1, 6]
+        surface_temp_1 = np.zeros_like(surface1)
+        surface1 = np.argwhere(surface1==1)
+        surface_temp_1[:len(surface1)] = surface1.squeeze()
+        surface_temp_1[len(surface1):] = np.array([surface1[0]]*(self.npoints-surface1.shape[0])).squeeze()
+
+        surface2 = np.copy(pos2)[sample_idx2, 6]
+        surface_temp_2 = np.zeros_like(surface2)
+        surface2 = np.argwhere(surface2==1)
+        surface_temp_2[:len(surface2)] = surface2.squeeze()
+        surface_temp_2[len(surface2):] = np.array([surface2[0]] * (self.npoints - surface2.shape[0])).squeeze()
+
+        return pos1_, pos2_, color1, color2, flow_, mask, surface_temp_1, surface_temp_2
+
 
     def __len__(self):
         return len(self.datapath)
@@ -221,15 +241,25 @@ if __name__ == '__main__':
     #     break
     # import mayavi.mlab as mlab
 
-    d = SceneflowDataset()
-    print(len(d))
+    dataset = SceneflowDataset(npoints=4096)
+    data_loader = DataLoader(dataset, batch_size=2)
+    # print(len(d))
     import time
 
     tic = time.time()
-    for i in range(len(d)):
-        pc1, pc2, col1, col2, flow, mask = d[i]
-        print(pc1.shape, pc2.shape, flow.shape)
-        continue
+    for i, data in enumerate(data_loader):
+        pc1, pc2, col1, col2, flow, mask, surface1, surface2= data
+        position1 = np.where(surface1 == 1)[0]
+        ind1 = torch.tensor(position1).cuda()
+        position2 = np.where(surface2 == 1)[0]
+        ind2 = torch.tensor(position2).cuda()
+        print(pc1.shape)
+        pc1 = torch.tensor(pc1).cuda().transpose(2, 1).contiguous()
+        pc2 = torch.tensor(pc2).cuda().transpose(2, 1).contiguous()
+        a = torch.index_select(pc1, 2, ind1).cuda()
+        b = torch.index_select(pc2, 2, ind2).cuda()
+        print(a.shape, b.shape, flow.shape)
+        break
 
         # mlab.figure(bgcolor=(1, 1, 1))
         # mlab.points3d(pc1[:, 0], pc1[:, 1], pc1[:, 2], scale_factor=0.05, color=(1, 0, 0))

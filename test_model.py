@@ -19,45 +19,6 @@ import wandb
 import itk
 import argparse
 
-def wrap_img(input_image, displacement_field, output_image):
-
-    Dimension = 3
-
-    VectorComponentType = itk.F
-    VectorPixelType = itk.Vector[VectorComponentType, Dimension]
-
-    DisplacementFieldType = itk.Image[VectorPixelType, Dimension]
-
-    PixelType = itk.UC
-    ImageType = itk.Image[PixelType, Dimension]
-
-    reader = itk.ImageFileReader[ImageType].New()
-    reader.SetFileName(input_image)
-
-    fieldReader = itk.ImageFileReader[DisplacementFieldType].New()
-    fieldReader.SetFileName(displacement_field)
-    fieldReader.Update()
-
-    deformationField = fieldReader.GetOutput()
-
-    warpFilter = itk.WarpImageFilter[ImageType, ImageType, DisplacementFieldType].New()
-
-    interpolator = itk.LinearInterpolateImageFunction[ImageType, itk.D].New()
-
-    warpFilter.SetInterpolator(interpolator)
-
-    warpFilter.SetOutputSpacing(deformationField.GetSpacing())
-    warpFilter.SetOutputOrigin(deformationField.GetOrigin())
-    warpFilter.SetOutputDirection(deformationField.GetDirection())
-
-    warpFilter.SetDisplacementField(deformationField)
-
-    warpFilter.SetInput(reader.GetOutput())
-
-    writer = itk.ImageFileWriter[ImageType].New()
-    writer.SetInput(warpFilter.GetOutput())
-    writer.SetFileName(output_image)
-
 class IOStream:
     def __init__(self, path):
         self.f = open(path, 'a')
@@ -113,7 +74,7 @@ if __name__ == "__main__":
 
     net = FlowNet3D(args).cuda()
 
-    net.load_state_dict(torch.load("./checkpoints/flownet3d/models/model_cross_val.best.t7"))
+    net.load_state_dict(torch.load("./checkpoints/flownet3d/models/model.best.t7"))
     net.eval()
     flow_pred = []
     flows = []
@@ -123,33 +84,53 @@ if __name__ == "__main__":
     test_loader = DataLoader(
         SceneflowDataset(npoints=args.num_points, train=False),
         batch_size=args.test_batch_size, shuffle=True, drop_last=False)
-    # for i, data in enumerate(test_loader):
-    data = next(iter(test_loader))
-    pc1, pc2, color1, color2, flow, mask1 = data
-    pcs.append(pc1)
-    pcs.append(pc2)
-    pc1 = pc1.cuda().transpose(2, 1).contiguous()
-    pc2 = pc2.cuda().transpose(2, 1).contiguous()
-    color1 = color1.cuda().transpose(2, 1).contiguous().float()
-    color2 = color2.cuda().transpose(2, 1).contiguous().float()
-    flow = flow.cuda()
-    mask1 = mask1.cuda().float()
-    flow_pred.append(net(pc1, pc2, color1, color2))
-    flows.append(flow)
-
-
-    flow_test = torch.transpose(flow_pred[0], dim0=2, dim1=1).detach().cpu().numpy().squeeze()
-    flow_gt = flows[0].detach().cpu().numpy().squeeze()
-
-    print(flow_test.shape, flow_gt.shape, pcs[0].numpy().squeeze().shape)
-
-    # np.savetxt("./flow_cv_test.txt", flow_test)
-    # print(flows[0].shape)
-    np.savetxt("./source_transformed.txt", pcs[0]+flow_gt)
-    # print(flow_test.min(), flow_test.max())
-    # print(flow_gt.min(), flow_gt.max())
-    # print("text saved!")
-
-
-    # wrap_img("./1B00EF_source.txt", "./flow_test.txt", "./1B00EF_source_registerd.txt")
+    for i, data in enumerate(test_loader):
+        # wandb.init(config=args)
+        pc1, pc2, color1, color2, flow, mask1, position1, position2 = data
+        pc1 = pc1.cuda().transpose(2, 1).contiguous()
+        pc2 = pc2.cuda().transpose(2, 1).contiguous()
+        color1 = color1.cuda().transpose(2, 1).contiguous().float()
+        color2 = color2.cuda().transpose(2, 1).contiguous().float()
+        flow = flow.cuda().transpose(2, 1).contiguous()
+        mask1 = mask1.cuda().float()
+        flow_pred = net(pc1, pc2, color1, color2)
+        pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+        pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+        flow = flow.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+        flow_min = flow.min()
+        flow_max = flow.max()
+        flow_pred = flow_pred.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+        np.savetxt("test_result_"+str(i)+".txt", pc1[:,:3]+flow_pred)
+        np.savetxt("test_source_"+str(i)+".txt", pc1[:,:3])
+        np.savetxt("test_target_"+str(i)+".txt", pc2[:,:3])
+        # wandb.log({
+        #     "source": wandb.Object3D(
+        #         {
+        #             "type": "lidar/beta",
+        #             "points": pc1[:, :3]
+        #         }
+        #     )})
+        # pc1[:, :3] += flow_pred
+        # wandb.log({
+        #     "registered": wandb.Object3D(
+        #         {
+        #             "type": "lidar/beta",
+        #             "points": pc1[:, :3]
+        #         }
+        #     )})
+        # wandb.log({
+        #     "target": wandb.Object3D(
+        #         {
+        #             "type": "lidar/beta",
+        #             "points": pc2[:, 3:6]
+        #         }
+        #     )})
+        # wandb.log({
+        #     "sanity target check": wandb.Object3D(
+        #         {
+        #             "type": "lidar/beta",
+        #             "points": pc1[:, :3] + flow
+        #         }
+        #     )})
+        # wandb.join()
 

@@ -217,7 +217,7 @@ class PointNetSetAbstraction(nn.Module):
         self.mlp_convs = nn.ModuleList()
         self.mlp_bns = nn.ModuleList()
         self.mlp2_convs = nn.ModuleList()
-        last_channel = in_channel+3+3+1
+        last_channel = in_channel+3#+3+1
         for out_channel in mlp:
             self.mlp_convs.append(nn.Conv2d(last_channel, out_channel, 1, bias = False))
             self.mlp_bns.append(nn.BatchNorm2d(out_channel))
@@ -278,7 +278,7 @@ class FlowEmbedding(nn.Module):
         self.mlp_convs = nn.ModuleList()
         self.mlp_bns = nn.ModuleList()
         if corr_func is 'concat':
-            last_channel = in_channel*2+3+3+1
+            last_channel = in_channel*2+3#+3+1
         for out_channel in mlp:
             self.mlp_convs.append(nn.Conv2d(last_channel, out_channel, 1, bias=False))
             self.mlp_bns.append(nn.BatchNorm2d(out_channel))
@@ -332,7 +332,7 @@ class PointNetSetUpConv(nn.Module):
         self.knn = knn
         self.mlp1_convs = nn.ModuleList()
         self.mlp2_convs = nn.ModuleList()
-        last_channel = f2_channel+3+3+1
+        last_channel = f2_channel+3#+3+1
         for out_channel in mlp:
             self.mlp1_convs.append(nn.Sequential(nn.Conv2d(last_channel, out_channel, 1, bias=False),
                                                  nn.BatchNorm2d(out_channel),
