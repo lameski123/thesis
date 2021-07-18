@@ -10,6 +10,6 @@ In [test_model.py](https://github.com/lameski123/prethesis/blob/main/test_model.
 
 Here is an example registration on our data:
 ![alt text](https://drive.google.com/file/d/1wcsb_EG7Eodvju4BsVTB4nMf0tdg4X2G/view?usp=sharing)
-yellow-source; blue-target; red-registration
+yellow-source; blue-registration; red-target
 
 
