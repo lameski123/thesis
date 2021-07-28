@@ -127,7 +127,7 @@ def test_one_epoch(args, net, test_loader):
         total_epe += epe_3d * batch_size
         # total_acc3d += acc_3d * batch_size
         # total_acc3d_2 += acc_3d_2 * batch_size
-        # print('batch EPE 3D: %f\tACC 3D: %f\tACC 3D 2: %f' % (epe_3d, acc_3d, acc_3d_2))
+        # print('batch EPE 3D: %f\tACC 3D: %f\10    tACC 3D 2: %f' % (epe_3d, acc_3d, acc_3d_2))
 
         total_loss += loss.item() * batch_size
         

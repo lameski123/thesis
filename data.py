@@ -158,14 +158,17 @@ class ModelNet40(Dataset):
 
 
 class SceneflowDataset(Dataset):
-    def __init__(self, npoints=4096, root='./point_clouds_test', train=False):
+    def __init__(self, npoints=4096, root='./point_clouds', train=True):
         #train=1 take train part
         #train=2 take test part
         #train=0 take whole dataset
         self.npoints = npoints
-
-        self.root = root
         self.train = train
+        if self.train==False:
+            self.root = "./point_clouds_test"
+        else:
+            self.root = root
+
         self.datapath = glob.glob(os.path.join(self.root, '*.npz'))
         # if self.train == True:
         #     self.datapath = self.datapath[:-8]
