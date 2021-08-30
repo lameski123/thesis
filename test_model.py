@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     net = FlowNet3D(args).cuda()
 
-    net.load_state_dict(torch.load("./checkpoints/flownet3d/models/model.best.t7"))
+    net.load_state_dict(torch.load("./checkpoints/flownet3d/models/model_spine_loss_rigid_DATA_TR_dif_rand.best.t7"))
     net.eval()
     flow_pred = []
     flows = []
@@ -97,12 +97,16 @@ if __name__ == "__main__":
         pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
         pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
         flow = flow.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+        color1 = color1.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+        color2 = color2.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
         flow_min = flow.min()
         flow_max = flow.max()
         flow_pred = flow_pred.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-        np.savetxt("test_result_"+str(i)+".txt", pc1[:,:3]+flow_pred)
-        np.savetxt("test_source_"+str(i)+".txt", pc1[:,:3])
-        np.savetxt("test_target_"+str(i)+".txt", pc2[:,:3])
+        np.savetxt("test_result_spine_"+str(i)+".txt", pc1[:,:3]+flow_pred)
+        np.savetxt("test_source_spine_"+str(i)+".txt", pc1[:,:3])
+        np.savetxt("test_target_spine_"+str(i)+".txt", pc2[:,:3])
+
+        # break
         # wandb.log({
         #     "source": wandb.Object3D(
         #         {
