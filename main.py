@@ -109,7 +109,7 @@ def test_one_epoch(args, net, test_loader, loss_opt):
         color2 = color2.cuda().transpose(2, 1).contiguous().float()
         flow = flow.cuda().contiguous()
         mask1 = mask1.cuda().float()
-        constraint = constraint[0].cuda().long()
+        constraint = constraint.cuda().long()
 
         batch_size = pc1.size(0)
         num_examples += batch_size
@@ -117,12 +117,13 @@ def test_one_epoch(args, net, test_loader, loss_opt):
 
 
         if loss_opt == "biomechanical":
-            source = pc1[:, :, constraint].permute(0, 2, 1)
-            predicted = pc1[:, :, constraint].permute(0, 2, 1) + flow_pred[:, constraint, :]
-            loss = F.mse_loss(flow_pred.float(), flow.float())
-            for j in range(len(constraint) - 1):
-                loss += 1e-2*torch.abs(F.mse_loss(source[:,j, :], source[:,j + 1,:]) - \
-                        F.mse_loss(predicted[:,j,:], predicted[:,j + 1,:]))
+            for idx in range(batch_size):
+                source = pc1[idx, :, constraint[idx]].T
+                predicted = pc1[idx, :, constraint[idx]].T + flow_pred[idx, constraint[idx], :]
+                loss = F.mse_loss(flow_pred.float(), flow.float())
+                for j in range(constraint.size(1) - 1):
+                    loss += 1e-2*torch.abs(F.mse_loss(source[j,:], source[j + 1,:]) - \
+                            F.mse_loss(predicted[j,:], predicted[j + 1,:]))
 
         elif loss_opt == "rigidity":
             source_dist1 = torch.Tensor().cuda()
@@ -206,7 +207,7 @@ def train_one_epoch(args, net, train_loader, opt, loss_opt):
         color2 = color2.cuda().transpose(2, 1).contiguous().float()
         flow = flow.cuda().transpose(2, 1).contiguous()
         mask1 = mask1.cuda().float()
-        constraint = constraint[0].cuda().long()
+        constraint = constraint.cuda()
 
         batch_size = pc1.size(0)
         opt.zero_grad()
@@ -214,12 +215,16 @@ def train_one_epoch(args, net, train_loader, opt, loss_opt):
         flow_pred = net(pc1, pc2, color1, color2)
 
         if loss_opt == "biomechanical":
-            source = pc1[:, :, constraint]
-            predicted = pc1[:, :, constraint] + flow_pred[:, :, constraint]
-            loss = F.mse_loss(flow_pred.float(), flow.float())
-            for j in range(0, len(constraint)-1,2):
-                loss += 1e-2*torch.abs(F.mse_loss(source[:,:, j], source[:,:,j+1]) -\
-                        F.mse_loss(predicted[:,:,j], predicted[:,:,j+1]))
+            # print(pc1.size())
+            # print(constraint.size())
+            for idx in range(batch_size):
+                source = pc1[idx, :, constraint[idx]]
+                predicted = pc1[idx, :, constraint[idx]] + flow_pred[idx, :, constraint[idx]]
+                loss = F.mse_loss(flow_pred.float(), flow.float())
+                # print(predicted.size(), source.size())
+                for j in range(0, constraint.size(1)-1,2):
+                    loss += 1e-2*torch.abs(F.mse_loss(source[:,j], source[:,j+1]) -\
+                            F.mse_loss(predicted[:,j], predicted[:,j+1]))
 
         elif loss_opt == "rigidity":
             source_dist1 = torch.Tensor().cuda()

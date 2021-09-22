@@ -126,7 +126,7 @@ class SceneflowDataset(Dataset):
             pos1 = data["pc1"].astype('float32')
             pos2 = data["pc2"].astype('float32')
             flow = data["flow"].astype('float32')
-            constraint = data["cstPts"].astype('float32')
+            constraint = data["cstPts"].astype('int')
 
             # augmentation
             if self.train==True:
@@ -190,28 +190,37 @@ class SceneflowDataset(Dataset):
 
         surface1 = np.copy(pos1)[:, 6]
         # specific for vertebrae: sampling 4096 points
-        # including the 8 points for biomechanical constraint
+        # and adding the 8 points for biomechanical constraint
         L1 = np.argwhere(surface1 == 1).squeeze()
-        sample_idx1 = np.random.choice(L1, self.npoints-1, replace=False)
+        sample_idx1 = np.random.choice(L1, self.npoints, replace=False)
         L2 = np.argwhere(surface1 == 2).squeeze()
-        sample_idx2 = np.random.choice(L2, self.npoints-2, replace=False)
+        sample_idx2 = np.random.choice(L2, self.npoints, replace=False)
         L3 = np.argwhere(surface1 == 3).squeeze()
-        sample_idx3 = np.random.choice(L3, self.npoints-2, replace=False)
+        sample_idx3 = np.random.choice(L3, self.npoints, replace=False)
         L4 = np.argwhere(surface1 == 4).squeeze()
-        sample_idx4 = np.random.choice(L4, self.npoints-2, replace=False)
+        sample_idx4 = np.random.choice(L4, self.npoints, replace=False)
         L5 = np.argwhere(surface1 == 5).squeeze()
-        sample_idx5 = np.random.choice(L5, self.npoints-1, replace=False)
+        sample_idx5 = np.random.choice(L5, self.npoints, replace=False)
+        #PROBLEM WITH POINT SELECTION WORK ON IT!!!!
 
-        sample_idx_ = np.concatenate(([constraint[0]],sample_idx1,  #0-4095
-                                      constraint[1:3],sample_idx2,  #4096-8191
-                                      constraint[3:5],sample_idx3,  #8192-16387
-                                      constraint[5:7],sample_idx4,  #16388-20483
-                                      [constraint[-1]], sample_idx5 #20484-24579
-                                      ), axis=0).astype(int)
-
+        sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
+                                      sample_idx3, sample_idx4,
+                                      sample_idx5), axis=0).astype(int)
+        # take every 5th point so that every vertebra has equal number of points
         sample_idx_source = sample_idx_[::5]
-        # np.random.shuffle(sample_idx_source)
-        # sample_idx_source = np.concatenate((sample_idx_source[:-8], constraint)).astype(int)
+        # make space for the constraint points
+        sample_idx_source = np.delete(sample_idx_source, [10, 1200, 1201, 2000, 2001, 3000, 3001, 4000])
+        # add the constraint points
+        constraint_points = np.array([L1[constraint[0],...],
+                                            L2[constraint[1],...],
+                                            L2[constraint[2],...],
+                                            L3[constraint[3],...],
+                                            L3[constraint[4],...],
+                                            L4[constraint[5],...],
+                                            L4[constraint[6],...],
+                                            L5[constraint[7],...]])
+
+        sample_idx_source = np.concatenate((sample_idx_source, constraint_points),axis=0).astype(int)
 
 
         np.random.seed(20)
@@ -230,9 +239,7 @@ class SceneflowDataset(Dataset):
 
         sample_idx_ = np.concatenate((sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5), axis=0)
 
-
         sample_idx_target = sample_idx_[::5]
-
 
         pos1_ = np.copy(pos1)[sample_idx_source, :3]*1e+3
 
@@ -262,7 +269,7 @@ class SceneflowDataset(Dataset):
 ########################################################################
         mask = np.ones([self.npoints])
 
-        return pos1_, pos2_, color1, color2, flow_, mask, np.array([0,820,821,1640,1641,2460,2461,3280]), vertebrae_point_inx_src, vertebrae_point_inx_tar#surface_temp_1, surface_temp_2
+        return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095-8, -1)]), vertebrae_point_inx_src, vertebrae_point_inx_tar#surface_temp_1, surface_temp_2
 
 
     def __len__(self):
