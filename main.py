@@ -25,9 +25,6 @@ import pandas as pd
 from sklearn.model_selection import KFold, StratifiedKFold
 from typing import Iterator, Optional, Sequence, List, TypeVar, Generic, Sized
 
-T_co = TypeVar('T_co', covariant=True)
-
-
 
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -35,10 +32,6 @@ class dotdict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-mydict = {'val':'it works'}
-nested_dict = {'val':'nested works too'}
-mydict = dotdict(mydict)
-mydict.val
 
 class IOStream:
     def __init__(self, path):
@@ -92,7 +85,7 @@ def scene_flow_EPE_np(pred, labels, mask):
     return EPE, acc1, acc2
 
 
-def test_one_epoch(args, net, test_loader, loss_opt):
+def test_one_epoch(net, test_loader, loss_opt):
     net.eval()
 
     total_loss = 0
@@ -101,213 +94,152 @@ def test_one_epoch(args, net, test_loader, loss_opt):
     chamfer = chamferdist.ChamferDistance()
 
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
-        pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2 = data
-
-        pc1 = pc1.cuda().transpose(2, 1).contiguous().float()
-        pc2 = pc2.cuda().transpose(2, 1).contiguous().float()
-        color1 = color1.cuda().transpose(2, 1).contiguous().float()
-        color2 = color2.cuda().transpose(2, 1).contiguous().float()
-        flow = flow.cuda().contiguous()
-        mask1 = mask1.cuda().float()
-        constraint = constraint.cuda().long()
+        color1, color2, constraint, flow, pc1, pc2, position1 = read_batch_data(data)
 
         batch_size = pc1.size(0)
         num_examples += batch_size
-        flow_pred = net(pc1, pc2, color1, color2).permute(0,2,1)
-
+        flow_pred = net(pc1, pc2, color1, color2) #.permute(0,2,1)
 
         if loss_opt == "biomechanical":
             for idx in range(batch_size):
-                source = pc1[idx, :, constraint[idx]].T
-                predicted = pc1[idx, :, constraint[idx]].T + flow_pred[idx, constraint[idx], :]
-                loss = F.mse_loss(flow_pred.float(), flow.float())
-                for j in range(constraint.size(1) - 1):
-                    loss += 1e-2*torch.abs(F.mse_loss(source[j,:], source[j + 1,:]) - \
-                            F.mse_loss(predicted[j,:], predicted[j + 1,:]))
-
+                loss = biomechanical_loss(constraint, flow, flow_pred, idx, pc1)
         elif loss_opt == "rigidity":
-            source_dist1 = torch.Tensor().cuda()
-            source_dist2 = torch.Tensor().cuda()
-
-            predict_dist1 = torch.Tensor().cuda()
-            predict_dist2 = torch.Tensor().cuda()
-
-            for idx in range(pc1.shape[0]):
-                for p1 in position1:
-                    p1 = p1.type(torch.int).cuda()
-                    source_dist1 = torch.cat((source_dist1, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[..., None] \
-                                              .expand(-1, -1, p1.size()[1]) \
-                                              .reshape(3, -1).T), dim=0)
-
-                    source_dist2 = torch.cat((source_dist2, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[None, ...] \
-                                              .expand(p1.size()[1], -1, -1) \
-                                              .reshape(3, -1).T), dim=0)
-
-                    predicted = pc1[idx, ...].T + flow_pred[idx, ...]
-                    predict_dist1 = torch.cat((predict_dist1, torch.index_select(predicted.T, 1, p1[idx, :])[..., None] \
-                                               .expand(-1, -1, p1.size()[1]) \
-                                               .reshape(3, -1).T), dim=0)
-
-                    predict_dist2 = torch.cat((predict_dist2, torch.index_select(predicted.T, 1, p1[idx, :])[None, ...] \
-                                               .expand(p1.size()[1], -1, -1) \
-                                               .reshape(3, -1).T), dim=0)
-
-            loss = F.mse_loss(flow_pred.float(), flow.float()) + \
-                       torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
-                                 torch.sqrt(F.mse_loss(predict_dist1, predict_dist2))) / 5
-
+            loss = rigidity_loss(flow, flow_pred, pc1, position1)
         elif loss_opt == "chamfer":
-            predicted = pc1.permute(0,2,1) + flow_pred
-            loss = F.mse_loss(flow_pred.float(), flow.float()) + \
-                   chamfer(predicted.type(torch.float), pc2.permute(0,2,1).type(torch.float), bidirectional=True) * 1e-7
-
-        else:#flow loss
+            loss = chamfer_loss(chamfer, flow, flow_pred, pc1, pc2)
+        else:  # flow loss
             loss = F.mse_loss(flow_pred.float(), flow.float())
 
-
-
         if i % 100 == 0:
-            # print(i)
-            pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-            pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-            flow_pred = flow_pred.detach().cpu().numpy()[0, :, :].squeeze()
-            to_plot = np.zeros((pc1.shape[0] * 3, 6))
-            to_plot[:pc1.shape[0], :3] = pc1[:, :3]
-            to_plot[:pc1.shape[0], 3] = 255  # red
-            to_plot[pc1.shape[0]:pc1.shape[0] * 2, :3] = pc1[:, :3] + flow_pred
-            to_plot[pc1.shape[0]:pc1.shape[0] * 2, 4] = 255  # green
-            to_plot[pc1.shape[0] * 2:, :3] = pc2[:, :3]
-            to_plot[pc1.shape[0] * 2:, 5] = 255 #blue
-
-            wandb.log({
-                "validation": wandb.Object3D(
-                    {
-                        "type": "lidar/beta",
-                        "points": to_plot
-
-                    }
-                )
-            })
+            plot_pointcloud(flow_pred, pc1, pc2)
 
         total_loss += loss.item() * batch_size
 
     return total_loss * 1.0 / num_examples
 
-def train_one_epoch(args, net, train_loader, opt, loss_opt):
+
+def train_one_epoch(net, train_loader, opt, loss_opt):
     net.train()
     num_examples = 0
     total_loss = 0
     chamfer = chamferdist.ChamferDistance()
-    for i, data in tqdm(enumerate(train_loader), total = len(train_loader)):
-
-        pc1, pc2, color1, color2, flow, mask1,constraint, position1, position2 = data
-        pc1 = pc1.cuda().transpose(2, 1).contiguous().float()
-        pc2 = pc2.cuda().transpose(2, 1).contiguous().float()
-        color1 = color1.cuda().transpose(2, 1).contiguous().float()
-        color2 = color2.cuda().transpose(2, 1).contiguous().float()
-        flow = flow.cuda().transpose(2, 1).contiguous()
-        mask1 = mask1.cuda().float()
-        constraint = constraint.cuda()
+    for i, data in tqdm(enumerate(train_loader), total=len(train_loader)):
+        color1, color2, constraint, flow, pc1, pc2, position1 = read_batch_data(data)
 
         batch_size = pc1.size(0)
         opt.zero_grad()
         num_examples += batch_size
         flow_pred = net(pc1, pc2, color1, color2)
-
         if loss_opt == "biomechanical":
-            # print(pc1.size())
-            # print(constraint.size())
             for idx in range(batch_size):
-                source = pc1[idx, :, constraint[idx]]
-                predicted = pc1[idx, :, constraint[idx]] + flow_pred[idx, :, constraint[idx]]
-                loss = F.mse_loss(flow_pred.float(), flow.float())
-                # print(predicted.size(), source.size())
-                for j in range(0, constraint.size(1)-1,2):
-                    loss += 1e-2*torch.abs(F.mse_loss(source[:,j], source[:,j+1]) -\
-                            F.mse_loss(predicted[:,j], predicted[:,j+1]))
-
+                loss = biomechanical_loss(constraint, flow, flow_pred, idx, pc1)
         elif loss_opt == "rigidity":
-            source_dist1 = torch.Tensor().cuda()
-            source_dist2 = torch.Tensor().cuda()
-
-            predict_dist1 = torch.Tensor().cuda()
-            predict_dist2 = torch.Tensor().cuda()
-
-            for idx in range(pc1.shape[0]):
-                for p1 in position1:
-                    p1 = p1.type(torch.int).cuda()
-
-                    source_dist1 = torch.cat((source_dist1, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[..., None] \
-                                              .expand(-1, -1, p1.size()[1]) \
-                                              .reshape(3, -1).T), dim=0)
-
-                    source_dist2 = torch.cat((source_dist2, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[None, ...] \
-                                              .expand(p1.size()[1], -1, -1) \
-                                              .reshape(3, -1).T), dim=0)
-
-                    predict_dist1 = torch.cat((predict_dist1, torch.index_select(pc1[idx, ...] +
-                                                                                 flow_pred[idx, ...], 1, p1[idx, :])[
-                        ..., None] \
-                                               .expand(-1, -1, p1.size()[1]) \
-                                               .reshape(3, -1).T), dim=0)
-
-                    predict_dist2 = torch.cat((predict_dist2, torch.index_select(pc1[idx, ...] +
-                                                                                 flow_pred[idx, ...], 1, p1[idx, :])[
-                        None, ...] \
-                                               .expand(p1.size()[1], -1, -1) \
-                                               .reshape(3, -1).T), dim=0)
-            loss = F.mse_loss(flow_pred.float(), flow.float()) + \
-            torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
-                         torch.sqrt(F.mse_loss(predict_dist1, predict_dist2)))/5
-
+            loss = rigidity_loss(flow, flow_pred, pc1, position1)
         elif loss_opt == "chamfer":
-            predicted = pc1 + flow_pred
-            loss = F.mse_loss(flow_pred.float(), flow.float()) + \
-                chamfer(predicted.type(torch.float), pc2.type(torch.float), bidirectional=True)*1e-7
-        else:#flow loss
+            loss = chamfer_loss(chamfer, flow, flow_pred, pc1, pc2)
+        else: # flow loss
             loss = F.mse_loss(flow_pred.float(), flow.float())
 
         loss.backward()
-
         opt.step()
-
         total_loss += loss.item() * batch_size
-        # print(i)
-        #Plot in wandb
-        if i%270==0:
-            pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
-            pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
-            flow_pred = flow_pred.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
-            to_plot = np.zeros((pc1.shape[0] * 3, 6))
-            to_plot[:pc1.shape[0], :3] = pc1[:, :3]
-            to_plot[:pc1.shape[0], 3] = 255  # red
-            to_plot[pc1.shape[0]:pc1.shape[0] * 2, :3] = pc1[:, :3] + flow_pred
-            to_plot[pc1.shape[0]:pc1.shape[0] * 2, 4] = 255  # green
-            to_plot[pc1.shape[0] * 2:, :3] = pc2[:, :3]
-            to_plot[pc1.shape[0] * 2:, 5] = 255 # blue
-            wandb.log({
-                "training": wandb.Object3D(
-                    {
-                        "type": "lidar/beta",
-                        "points": to_plot
 
-                    }
-                )
-            })
+        if i % 270 == 0:
+            plot_pointcloud(flow_pred, pc1, pc2)
 
-    return total_loss*1.0/num_examples
+    return total_loss * 1.0 / num_examples
 
 
+def plot_pointcloud(flow_pred, pc1, pc2):
+    pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
+    pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
+    flow_pred = flow_pred.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
+    to_plot = np.zeros((pc1.shape[0] * 3, 6))
+    to_plot[:pc1.shape[0], :3] = pc1[:, :3]
+    to_plot[:pc1.shape[0], 3] = 255  # red
+    to_plot[pc1.shape[0]:pc1.shape[0] * 2, :3] = pc1[:, :3] + flow_pred
+    to_plot[pc1.shape[0]:pc1.shape[0] * 2, 4] = 255  # green
+    to_plot[pc1.shape[0] * 2:, :3] = pc2[:, :3]
+    to_plot[pc1.shape[0] * 2:, 5] = 255  # blue
+    wandb.log({
+        "training": wandb.Object3D(
+            {
+                "type": "lidar/beta",
+                "points": to_plot
 
-def test(args, net, test_loader, boardio, textio):
+            }
+        )
+    })
 
-    test_loss, epe= test_one_epoch(args, net, test_loader, args.loss)
+
+def chamfer_loss(chamfer, flow, flow_pred, pc1, pc2):
+    predicted = pc1 + flow_pred
+    loss = F.mse_loss(flow_pred.float(), flow.float())
+    loss += chamfer(predicted.type(torch.float), pc2.type(torch.float), bidirectional=True) * 1e-7
+    return loss
+
+
+def rigidity_loss(flow, flow_pred, pc1, position1):
+    source_dist1 = torch.Tensor().cuda()
+    source_dist2 = torch.Tensor().cuda()
+    predict_dist1 = torch.Tensor().cuda()
+    predict_dist2 = torch.Tensor().cuda()
+    for idx in range(pc1.shape[0]):
+        for p1 in position1:
+            p1 = p1.type(torch.int).cuda()
+
+            source_dist1 = torch.cat((source_dist1, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[..., None] \
+                                      .expand(-1, -1, p1.size()[1]) \
+                                      .reshape(3, -1).T), dim=0)
+
+            source_dist2 = torch.cat((source_dist2, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[None, ...] \
+                                      .expand(p1.size()[1], -1, -1) \
+                                      .reshape(3, -1).T), dim=0)
+
+            predict_dist1 = torch.cat((predict_dist1, torch.index_select(pc1[idx, ...] +
+                                                                         flow_pred[idx, ...], 1, p1[idx, :])[..., None]
+                                       .expand(-1, -1, p1.size()[1]).reshape(3, -1).T), dim=0)
+
+            predict_dist2 = torch.cat((predict_dist2, torch.index_select(pc1[idx, ...] +
+                                                                         flow_pred[idx, ...], 1, p1[idx, :])[None, ...]
+                                       .expand(p1.size()[1], -1, -1).reshape(3, -1).T), dim=0)
+    loss = F.mse_loss(flow_pred.float(), flow.float())
+    loss += torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
+                      torch.sqrt(F.mse_loss(predict_dist1, predict_dist2))) / 5
+    return loss
+
+
+def biomechanical_loss(constraint, flow, flow_pred, idx, pc1):
+    source = pc1[idx, :, constraint[idx]]
+    predicted = pc1[idx, :, constraint[idx]] + flow_pred[idx, :, constraint[idx]]
+    loss = F.mse_loss(flow_pred.float(), flow.float())
+    for j in range(0, constraint.size(1) - 1, 2):
+        loss += 1e-2 * torch.abs(F.mse_loss(source[:, j], source[:, j + 1]) -
+                                 F.mse_loss(predicted[:, j], predicted[:, j + 1]))
+    return loss
+
+
+def read_batch_data(data):
+    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2 = data
+    pc1 = pc1.cuda().transpose(2, 1).contiguous().float()
+    pc2 = pc2.cuda().transpose(2, 1).contiguous().float()
+    color1 = color1.cuda().transpose(2, 1).contiguous().float()
+    color2 = color2.cuda().transpose(2, 1).contiguous().float()
+    flow = flow.cuda().transpose(2, 1).contiguous()
+    mask1 = mask1.cuda().float()
+    constraint = constraint.cuda()
+    return color1, color2, constraint, flow, pc1, pc2, position1
+
+
+def test(args, net, test_loader, textio):
+
+    test_loss, epe = test_one_epoch(net, test_loader, args.loss)
 
     textio.cprint('==FINAL TEST==')
     textio.cprint('mean test loss: %f\tEPE 3D: %f'%(test_loss, epe))
 
 
-def train(args, net, train_loader, test_loader, boardio, textio):
+def train(args, net, train_loader, test_loader, textio):
     if args.use_sgd:
         print("Use SGD")
         opt = optim.SGD(net.parameters(), lr=args.lr * 100, momentum=args.momentum, weight_decay=1e-4)
@@ -320,10 +252,10 @@ def train(args, net, train_loader, test_loader, boardio, textio):
     best_test_loss = np.inf
     for epoch in range(args.epochs):
         textio.cprint('==epoch: %d, learning rate: %f=='%(epoch, opt.param_groups[0]['lr']))
-        train_loss = train_one_epoch(args, net, train_loader, opt, args.loss)
+        train_loss = train_one_epoch(net, train_loader, opt, args.loss)
         textio.cprint('mean train EPE loss: %f'%train_loss)
 
-        test_loss = test_one_epoch(args, net, test_loader, args.loss)
+        test_loss = test_one_epoch(net, test_loader, args.loss)
         textio.cprint('mean test loss: %f'%(test_loss))
         if best_test_loss >= test_loss:
             best_test_loss = test_loss
@@ -340,67 +272,41 @@ def train(args, net, train_loader, test_loader, boardio, textio):
         args.lr = scheduler.get_last_lr()[0]
 
 
-if __name__ == '__main__':
-    # main()
+def main():
     # UNCOMMENT THIS SEGMENT IF YOU WANT TO USE TERMINAL TO RUN THE SCRIPT
     ###################################
-    # parser = argparse.ArgumentParser(description='Spine Registration')
-    #     parser.add_argument('--exp_name', type=str, default='exp', metavar='N',
-    #                         help='Name of the experiment')
-    #     parser.add_argument('--model', type=str, default='flownet', metavar='N',
-    #                         choices=['flownet'],
-    #                         help='Model to use, [flownet]')
-    #     parser.add_argument('--emb_dims', type=int, default=512, metavar='N',
-    #                         help='Dimension of embeddings')
-    #     parser.add_argument('--num_points', type=int, default=4096,
-    #                         help='Point Number [default: 4096]')
-    #     parser.add_argument('--dropout', type=float, default=0.5, metavar='N',
-    #                         help='Dropout ratio in transformer')
-    #     parser.add_argument('--batch_size', type=int, default=4, metavar='batch_size',
-    #                         help='Size of batch)')
-    #     parser.add_argument('--test_batch_size', type=int, default=4, metavar='batch_size',
-    #                         help='Size of batch)')
-    #     parser.add_argument('--epochs', type=int, default=100, metavar='N',
-    #                         help='number of episode to train ')
-    #     parser.add_argument('--use_sgd', action='store_true', default=False,
-    #                         help='Use SGD')
-    #     parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-    #                         help='learning rate (default: 0.001, 0.1 if using sgd)')
-    #     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
-    #                         help='SGD momentum (default: 0.9)')
-    #     parser.add_argument('--no_cuda', action='store_true', default=False,
-    #                         help='enables CUDA training')
-    #     parser.add_argument('--seed', type=int, default=100, metavar='S',
-    #                         help='random seed (default: 100)')
-    #     parser.add_argument('--eval', action='store_true', default=False,
-    #                         help='evaluate the model')
-    #     parser.add_argument('--cycle', type=bool, default=False, metavar='N',
-    #                         help='Whether to use cycle consistency')
-    #     parser.add_argument('--gaussian_noise', type=bool, default=False, metavar='N',
-    #                         help='Wheter to add gaussian noise')
-    #     parser.add_argument('--unseen', type=bool, default=False, metavar='N',
-    #                         help='Whether to test on unseen category')
-    #     parser.add_argument('--dataset', type=str, default='SceneflowDataset',
-    #                         choices=['SceneflowDataset'], metavar='N',
-    #                         help='dataset to use')
-    #     parser.add_argument('--dataset_path', type=str, default='../../datasets/data_processed_maxcut_35_20k_2k_8192', metavar='N',
-    #                         help='dataset to use')
-    #     parser.add_argument('--model_path', type=str, default='', metavar='N',
-    #                         help='Pretrained model path')
-    #     parser.add_argument('--model_loss', type=str, default='biomechanical', metavar='N',
-    #                         help='biomechanical(default), rigidity, chamfer or leave it empty("") only
-    #                         for flow loss')
-    #
-    #     args = parser.parse_args()
+    parser = argparse.ArgumentParser(description='Spine Registration')
+    parser.add_argument('--exp_name', type=str, default='flownet3d', metavar='N', help='Name of the experiment')
+    parser.add_argument('--model', type=str, default='flownet', metavar='N', choices=['flownet'], help='Model to use, [flownet]')
+    parser.add_argument('--emb_dims', type=int, default=512, metavar='N', help='Dimension of embeddings')
+    parser.add_argument('--num_points', type=int, default=4096, help='Point Number [default: 4096]')
+    parser.add_argument('--dropout', type=float, default=0.5, metavar='N', help='Dropout ratio in transformer')
+    parser.add_argument('--batch_size', type=int, default=4, metavar='batch_size', help='Size of batch)')
+    parser.add_argument('--test_batch_size', type=int, default=4, metavar='batch_size', help='Size of batch)')
+    parser.add_argument('--epochs', type=int, default=100, metavar='N', help='number of episode to train ')
+    parser.add_argument('--use_sgd', action='store_true', default=False, help='Use SGD')
+    parser.add_argument('--lr', type=float, default=0.001, metavar='LR', help='learning rate (default: 0.001, 0.1 if using sgd)')
+    parser.add_argument('--momentum', type=float, default=0.9, metavar='M', help='SGD momentum (default: 0.9)')
+    parser.add_argument('--no_cuda', action='store_true', default=False, help='enables CUDA training')
+    parser.add_argument('--seed', type=int, default=100, metavar='S', help='random seed (default: 100)')
+    parser.add_argument('--eval', action='store_true', default=False, help='evaluate the model')
+    parser.add_argument('--cycle', type=bool, default=False, metavar='N', help='Whether to use cycle consistency')
+    parser.add_argument('--gaussian_noise', type=bool, default=False, metavar='N', help='Wheter to add gaussian noise')
+    parser.add_argument('--dataset', type=str, default='SceneflowDataset', choices=['SceneflowDataset'], metavar='N', help='dataset to use')
+    parser.add_argument('--dataset_path', type=str, default='./spine_clouds', metavar='N', help='dataset to use')
+    parser.add_argument('--model_path', type=str, default='', metavar='N', help='Pretrained model path')
+    parser.add_argument('--loss', type=str, default='biomechanical', metavar='N', help='biomechanical(default), rigidity, chamfer or leave it empty("") only for flow loss')
+
+    args = parser.parse_args()
     ################################
     # IF YOU WANT TO USE THE TERMINAL COMMANDS, COMMENT THE FOLLOWING BLOCK
     #################################
-    args = {"exp_name":"flownet3d","emb_dims":512, "num_points":4096,
-            "lr":0.001, "momentum":0.9,"seed":100, "dropout":0.5,
-            "batch_size":4, "test_batch_size":4, "epochs":100,
-            "use_sgd":False, "eval":False, "cycle":False,
-            "gaussian_noise":False, "loss":"biomechanical"}
-    args = dotdict(args)
+    # args = {"exp_name":"flownet3d","emb_dims":512, "num_points":4096,
+    #         "lr":0.001, "momentum":0.9,"seed":100, "dropout":0.5,
+    #         "batch_size":4, "test_batch_size":4, "epochs":100,
+    #         "use_sgd":False, "eval":False, "cycle":False,
+    #         "gaussian_noise":False, "loss":"biomechanical"}
+    # args = dotdict(args)
     #################################
 
     torch.backends.cudnn.deterministic = True
@@ -408,31 +314,28 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(100)
     np.random.seed(100)
 
-    # boardio = SummaryWriter(log_dir='checkpoints/' + args.exp_name)
-    boardio = []
     _init_("flownet3d")
 
     textio = IOStream('checkpoints/' + "flownet3d" + '/run.log')
     textio.cprint(str(args))
 
-    dataset = SceneflowDataset(npoints=4096)
-
     net = FlowNet3D(args).cuda()
     net.apply(weights_init)
     # net.load_state_dict(torch.load("./checkpoints/flownet3d/models/model_spine_kaiming_no_color.best.t7"))
 
-    wandb.init(config=args)
+    wandb.init(project='spine_flownet', config=args)
 
-    train_loader = DataLoader(SceneflowDataset(npoints=4096, train=True),
-        batch_size=args.batch_size, drop_last=True)
-    test_loader = DataLoader(
-        SceneflowDataset(npoints=4096, train=False),
-        batch_size=args.batch_size,  drop_last=False)
+    train_set = SceneflowDataset(npoints=4096, train=True, root=args.dataset_path)
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
+    test_set = SceneflowDataset(npoints=4096, train=False, root=args.dataset_path)
+    test_loader = DataLoader(test_set, batch_size=args.batch_size,  drop_last=False)
 
     if torch.cuda.device_count() > 1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
     # wandb.watch(net, log_freq=100)
-    train(args, net, train_loader, test_loader, boardio, textio)
+    train(args, net, train_loader, test_loader, textio)
 
 
+if __name__ == '__main__':
+    main()
