@@ -99,16 +99,14 @@ def test_one_epoch(net, test_loader, loss_opt):
         batch_size = pc1.size(0)
         num_examples += batch_size
         flow_pred = net(pc1, pc2, color1, color2)
-
+        loss = F.mse_loss(flow_pred.float(), flow.float())
         if loss_opt == "biomechanical":
             for idx in range(batch_size):
-                loss = biomechanical_loss(constraint, flow, flow_pred, idx, pc1)
+                loss += biomechanical_loss(constraint, flow, flow_pred, idx, pc1)
         elif loss_opt == "rigidity":
-            loss = rigidity_loss(flow, flow_pred, pc1, position1)
+            loss += rigidity_loss(flow, flow_pred, pc1, position1)
         elif loss_opt == "chamfer":
-            loss = chamfer_loss(chamfer, flow, flow_pred, pc1, pc2)
-        else:  # flow loss
-            loss = F.mse_loss(flow_pred.float(), flow.float())
+            loss += chamfer_loss(chamfer, flow, flow_pred, pc1, pc2)
 
         if i % 100 == 0:
             plot_pointcloud(flow_pred, pc1, pc2)
@@ -130,15 +128,14 @@ def train_one_epoch(net, train_loader, opt, loss_opt):
         opt.zero_grad()
         num_examples += batch_size
         flow_pred = net(pc1, pc2, color1, color2)
+        loss = F.mse_loss(flow_pred.float(), flow.float())
         if loss_opt == "biomechanical":
             for idx in range(batch_size):
-                loss = biomechanical_loss(constraint, flow, flow_pred, idx, pc1)
+                loss += biomechanical_loss(constraint, flow, flow_pred, idx, pc1)
         elif loss_opt == "rigidity":
-            loss = rigidity_loss(flow, flow_pred, pc1, position1)
+            loss += rigidity_loss(flow, flow_pred, pc1, position1)
         elif loss_opt == "chamfer":
-            loss = chamfer_loss(chamfer, flow, flow_pred, pc1, pc2)
-        else: # flow loss
-            loss = F.mse_loss(flow_pred.float(), flow.float())
+            loss += chamfer_loss(chamfer, flow, flow_pred, pc1, pc2)
 
         loss.backward()
         opt.step()
@@ -174,8 +171,8 @@ def plot_pointcloud(flow_pred, pc1, pc2):
 
 def chamfer_loss(chamfer, flow, flow_pred, pc1, pc2):
     predicted = pc1 + flow_pred
-    loss = F.mse_loss(flow_pred.float(), flow.float())
-    loss += chamfer(predicted.type(torch.float), pc2.type(torch.float), bidirectional=True) * 1e-7
+
+    loss = chamfer(predicted.type(torch.float), pc2.type(torch.float), bidirectional=True) * 1e-7
     return loss
 
 
@@ -199,8 +196,7 @@ def rigidity_loss(flow, flow_pred, pc1, position1):
 
             predict_dist2 = torch.cat((predict_dist2, torch.index_select(pc1[idx, ...] + flow_pred[idx, ...], 1, p1[idx, :])[None, ...]
                                        .expand(p1.size()[1], -1, -1).reshape(3, -1).T), dim=0)
-    loss = F.mse_loss(flow_pred.float(), flow.float())
-    loss += torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
+    loss = torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
                       torch.sqrt(F.mse_loss(predict_dist1, predict_dist2))) / 5
     return loss
 
@@ -208,7 +204,7 @@ def rigidity_loss(flow, flow_pred, pc1, position1):
 def biomechanical_loss(constraint, flow, flow_pred, idx, pc1):
     source = pc1[idx, :, constraint[idx]]
     predicted = pc1[idx, :, constraint[idx]] + flow_pred[idx, :, constraint[idx]]
-    loss = F.mse_loss(flow_pred.float(), flow.float())
+    loss = torch.tensor([0.0], device=flow.device, dtype=flow.dtype)
     for j in range(0, constraint.size(1) - 1, 2):
         loss += 1e-2 * torch.abs(torch.linalg.norm(source[:, j], source[:, j + 1]) -
                                  torch.linalg.norm(predicted[:, j], predicted[:, j + 1]))
