@@ -98,7 +98,7 @@ def test_one_epoch(net, test_loader, loss_opt):
 
         batch_size = pc1.size(0)
         num_examples += batch_size
-        flow_pred = net(pc1, pc2, color1, color2) #.permute(0,2,1)
+        flow_pred = net(pc1, pc2, color1, color2)
 
         if loss_opt == "biomechanical":
             for idx in range(batch_size):
@@ -188,20 +188,16 @@ def rigidity_loss(flow, flow_pred, pc1, position1):
         for p1 in position1:
             p1 = p1.type(torch.int).cuda()
 
-            source_dist1 = torch.cat((source_dist1, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[..., None] \
-                                      .expand(-1, -1, p1.size()[1]) \
-                                      .reshape(3, -1).T), dim=0)
+            source_dist1 = torch.cat((source_dist1, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[..., None]
+                                      .expand(-1, -1, p1.size()[1]).reshape(3, -1).T), dim=0)
 
-            source_dist2 = torch.cat((source_dist2, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[None, ...] \
-                                      .expand(p1.size()[1], -1, -1) \
-                                      .reshape(3, -1).T), dim=0)
+            source_dist2 = torch.cat((source_dist2, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[None, ...]
+                                      .expand(p1.size()[1], -1, -1).reshape(3, -1).T), dim=0)
 
-            predict_dist1 = torch.cat((predict_dist1, torch.index_select(pc1[idx, ...] +
-                                                                         flow_pred[idx, ...], 1, p1[idx, :])[..., None]
+            predict_dist1 = torch.cat((predict_dist1, torch.index_select(pc1[idx, ...] + flow_pred[idx, ...], 1, p1[idx, :])[..., None]
                                        .expand(-1, -1, p1.size()[1]).reshape(3, -1).T), dim=0)
 
-            predict_dist2 = torch.cat((predict_dist2, torch.index_select(pc1[idx, ...] +
-                                                                         flow_pred[idx, ...], 1, p1[idx, :])[None, ...]
+            predict_dist2 = torch.cat((predict_dist2, torch.index_select(pc1[idx, ...] + flow_pred[idx, ...], 1, p1[idx, :])[None, ...]
                                        .expand(p1.size()[1], -1, -1).reshape(3, -1).T), dim=0)
     loss = F.mse_loss(flow_pred.float(), flow.float())
     loss += torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
@@ -214,8 +210,8 @@ def biomechanical_loss(constraint, flow, flow_pred, idx, pc1):
     predicted = pc1[idx, :, constraint[idx]] + flow_pred[idx, :, constraint[idx]]
     loss = F.mse_loss(flow_pred.float(), flow.float())
     for j in range(0, constraint.size(1) - 1, 2):
-        loss += 1e-2 * torch.abs(F.mse_loss(source[:, j], source[:, j + 1]) -
-                                 F.mse_loss(predicted[:, j], predicted[:, j + 1]))
+        loss += 1e-2 * torch.abs(torch.linalg.norm(source[:, j], source[:, j + 1]) -
+                                 torch.linalg.norm(predicted[:, j], predicted[:, j + 1]))
     return loss
 
 
