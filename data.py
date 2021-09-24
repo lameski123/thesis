@@ -61,6 +61,7 @@ def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.05):
     pointcloud += np.clip(sigma * np.random.randn(N, C), -1 * clip, clip)
     return pointcloud
 
+
 def farthest_subsample_points(pointcloud1, pointcloud2, num_subsampled_points=768):
     pointcloud1 = pointcloud1.T
     pointcloud2 = pointcloud2.T
@@ -74,6 +75,7 @@ def farthest_subsample_points(pointcloud1, pointcloud2, num_subsampled_points=76
     random_p2 = random_p1 #np.random.random(size=(1, 3)) + np.array([[500, 500, 500]]) * np.random.choice([1, -1, 2, -2])
     idx2 = nbrs2.kneighbors(random_p2, return_distance=False).reshape((num_subsampled_points,))
     return pointcloud1[idx1, :].T, pointcloud2[idx2, :].T
+
 
 def pad_data(surface2, L):
     surface_temp_2 = np.zeros((4096))
@@ -94,6 +96,82 @@ def centeroid_(arr):
 def find_nearest_vector(array, value):
     idx = np.array([np.linalg.norm(x+y+z) for (x,y,z) in np.abs(array-value)]).argmin()
     return idx
+
+
+def vertebrae_surface(surface):
+    L1 = np.argwhere(surface == 1).squeeze()
+    L2 = np.argwhere(surface == 2).squeeze()
+    L3 = np.argwhere(surface == 3).squeeze()
+    L4 = np.argwhere(surface == 4).squeeze()
+    L5 = np.argwhere(surface == 5).squeeze()
+    return L1, L2, L3, L4, L5
+
+
+def augment_data(flow, pos1, pos2):
+    to_augment = np.random.random()
+    angle_both = np.random.randint(0, 360)
+    angle_target = np.random.randint(-20, 20)
+    xyz = np.random.choice(["x", "y", "z"])
+    r = Rotation.from_euler(xyz, angle_both * np.pi / 180)
+    R = r.as_matrix()
+    r2 = Rotation.from_euler(xyz, angle_target * np.pi / 180)
+    R2 = r2.as_matrix()
+    # rotation
+    if to_augment > .5:
+        pos1_centroid = centeroid_(pos1[:, :3])
+        color1_centroid = centeroid_(pos1[:, 3:6])
+        pos2_centroid = centeroid_(pos2[:, :3])
+        color2_centroid = centeroid_(pos2[:, 3:6])
+
+        pos1[:, :3] -= pos1_centroid
+        pos2[:, :3] -= pos2_centroid
+        pos1[:, 3:6] -= color1_centroid
+        pos2[:, 3:6] -= color2_centroid
+
+        # rotate both source and target:
+        # pos1[:, :3] = np.dot(pos1[:, :3], R)
+        # pos1[:, 3:6] = np.dot(pos1[:, 3:6], R)
+        #
+        # pos2[:, :3] = np.dot(pos2[:, :3], R)
+        # pos2[:, 3:6] = np.dot(pos2[:, 3:6], R)
+
+        # only target slightly rotated
+        pos2[:, :3] = np.dot(pos2[:, :3], R2)
+        pos2[:, 3:6] = np.dot(pos2[:, 3:6], R2)
+
+        pos1[:, :3] += pos1_centroid
+        pos2[:, :3] += pos2_centroid
+        pos1[:, 3:6] += color1_centroid
+        pos2[:, 3:6] += color2_centroid
+
+        flow = pos2[:, :3] - pos1[:, :3]
+    to_augment = np.random.random()
+    # noise
+    sample_x = np.random.normal(0, 0.002, pos2.shape[0])
+    sample_y = np.random.normal(0, 0.002, pos2.shape[0])
+    sample_z = np.random.normal(0, 0.002, pos2.shape[0])
+    indexes = np.random.random(pos2.shape[0] // 3).astype(int)
+    # adding noice
+    if to_augment > .5:
+        pos2[indexes, 0] += sample_x[indexes]
+        pos2[indexes, 1] += sample_y[indexes]
+        pos2[indexes, 2] += sample_z[indexes]
+        pos2[indexes, 3] += sample_x[indexes]
+        pos2[indexes, 4] += sample_y[indexes]
+        pos2[indexes, 5] += sample_z[indexes]
+
+        flow = pos2[:, :3] - pos1[:, :3]
+    return flow
+
+
+def read_numpy_file(fp):
+    data = np.load(fp)
+    pos1 = data["pc1"].astype('float32')
+    pos2 = data["pc2"].astype('float32')
+    flow = data["flow"].astype('float32')
+    constraint = data["cstPts"].astype('int')
+    return constraint, flow, pos1, pos2
+
 
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='./spine_clouds', train=True):
@@ -122,86 +200,17 @@ class SceneflowDataset(Dataset):
     def __getitem__(self, index):
         fn = self.datapath[index]
         with open(fn, 'rb') as fp:
-            data = np.load(fp)
-            pos1 = data["pc1"].astype('float32')
-            pos2 = data["pc2"].astype('float32')
-            flow = data["flow"].astype('float32')
-            constraint = data["cstPts"].astype('int')
+            constraint, flow, pos1, pos2 = read_numpy_file(fp)
 
             # augmentation
             if self.train==True:
-                to_augment = np.random.random()
-                angle_both = np.random.randint(0, 360)
-                angle_target = np.random.randint(-20, 20)
-                xyz = np.random.choice(["x","y","z"])
-                r = Rotation.from_euler(xyz, angle_both * np.pi / 180)
-                R = r.as_matrix()
-                r2 = Rotation.from_euler(xyz, angle_target * np.pi / 180)
-                R2 = r2.as_matrix()
-
-                #rotation
-                if to_augment > .5:
-                    pos1_centroid = centeroid_(pos1[:,:3])
-                    color1_centroid = centeroid_(pos1[:,3:6])
-                    pos2_centroid = centeroid_(pos2[:,:3])
-                    color2_centroid = centeroid_(pos2[:,3:6])
-
-                    pos1[:,:3] -= pos1_centroid
-                    pos2[:,:3] -= pos2_centroid
-                    pos1[:,3:6] -= color1_centroid
-                    pos2[:,3:6] -= color2_centroid
-
-                    #rotate both source and target:
-                    # pos1[:, :3] = np.dot(pos1[:, :3], R)
-                    # pos1[:, 3:6] = np.dot(pos1[:, 3:6], R)
-                    #
-                    # pos2[:, :3] = np.dot(pos2[:, :3], R)
-                    # pos2[:, 3:6] = np.dot(pos2[:, 3:6], R)
-
-                    # only target slightly rotated
-                    pos2[:,:3] = np.dot(pos2[:,:3], R2)
-                    pos2[:,3:6] = np.dot(pos2[:,3:6], R2)
-
-
-                    pos1[:,:3] += pos1_centroid
-                    pos2[:,:3] += pos2_centroid
-                    pos1[:,3:6] += color1_centroid
-                    pos2[:,3:6] += color2_centroid
-
-                    flow = pos2[:,:3] - pos1[:,:3]
-                to_augment = np.random.random()
-                #noise
-                sample_x = np.random.normal(0, 0.002, pos2.shape[0])
-                sample_y = np.random.normal(0, 0.002, pos2.shape[0])
-                sample_z = np.random.normal(0, 0.002, pos2.shape[0])
-                indexes = np.random.random(pos2.shape[0]//3).astype(int)
-                #adding noice
-                if to_augment > .5:
-                    pos2[indexes, 0] += sample_x[indexes]
-                    pos2[indexes, 1] += sample_y[indexes]
-                    pos2[indexes, 2] += sample_z[indexes]
-                    pos2[indexes, 3] += sample_x[indexes]
-                    pos2[indexes, 4] += sample_y[indexes]
-                    pos2[indexes, 5] += sample_z[indexes]
-
-                    flow = pos2[:, :3] - pos1[:, :3]
+                flow = augment_data(flow, pos1, pos2)
 
         np.random.seed(100)
 
-        surface1 = np.copy(pos1)[:, 6]
-        # specific for vertebrae: sampling 4096 points
-        # and adding the 8 points for biomechanical constraint
-        L1 = np.argwhere(surface1 == 1).squeeze()
-        sample_idx1 = np.random.choice(L1, self.npoints, replace=False)
-        L2 = np.argwhere(surface1 == 2).squeeze()
-        sample_idx2 = np.random.choice(L2, self.npoints, replace=False)
-        L3 = np.argwhere(surface1 == 3).squeeze()
-        sample_idx3 = np.random.choice(L3, self.npoints, replace=False)
-        L4 = np.argwhere(surface1 == 4).squeeze()
-        sample_idx4 = np.random.choice(L4, self.npoints, replace=False)
-        L5 = np.argwhere(surface1 == 5).squeeze()
-        sample_idx5 = np.random.choice(L5, self.npoints, replace=False)
-        #PROBLEM WITH POINT SELECTION WORK ON IT!!!!
+        L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
+            pos1)
+        #TODO: PROBLEM WITH POINT SELECTION WORK ON IT!!!!
 
         sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
                                       sample_idx3, sample_idx4,
@@ -224,18 +233,8 @@ class SceneflowDataset(Dataset):
 
 
         np.random.seed(20)
-        surface1 = np.copy(pos2)[:, 6]
-        # specific for vertebrae:
-        L1 = np.argwhere(surface1 == 1).squeeze()
-        sample_idx1 = np.random.choice(L1, self.npoints, replace=False)
-        L2 = np.argwhere(surface1 == 2).squeeze()
-        sample_idx2 = np.random.choice(L2, self.npoints, replace=False)
-        L3 = np.argwhere(surface1 == 3).squeeze()
-        sample_idx3 = np.random.choice(L3, self.npoints, replace=False)
-        L4 = np.argwhere(surface1 == 4).squeeze()
-        sample_idx4 = np.random.choice(L4, self.npoints, replace=False)
-        L5 = np.argwhere(surface1 == 5).squeeze()
-        sample_idx5 = np.random.choice(L5, self.npoints, replace=False)
+        L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
+            pos2)
 
         sample_idx_ = np.concatenate((sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5), axis=0)
 
@@ -251,19 +250,11 @@ class SceneflowDataset(Dataset):
 
         surface1 = np.copy(pos1)[sample_idx_source, 6]
         # specific for vertebrae:
-        L1 = np.argwhere(surface1 == 1).squeeze()
-        L2 = np.argwhere(surface1 == 2).squeeze()
-        L3 = np.argwhere(surface1 == 3).squeeze()
-        L4 = np.argwhere(surface1 == 4).squeeze()
-        L5 = np.argwhere(surface1 == 5).squeeze()
+        L1, L2, L3, L4, L5 = vertebrae_surface(surface1)
 
         vertebrae_point_inx_src = [L1, L2, L3, L4, L5]
         surface2 = np.copy(pos2)[sample_idx_target, 6]
-        L1 = np.argwhere(surface2 == 1).squeeze()
-        L2 = np.argwhere(surface2 == 2).squeeze()
-        L3 = np.argwhere(surface2 == 3).squeeze()
-        L4 = np.argwhere(surface2 == 4).squeeze()
-        L5 = np.argwhere(surface2 == 5).squeeze()
+        L1, L2, L3, L4, L5 = vertebrae_surface(surface2)
 
         vertebrae_point_inx_tar = [L1, L2, L3, L4, L5]
 ########################################################################
@@ -271,10 +262,24 @@ class SceneflowDataset(Dataset):
 
         return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095-8, -1)]), vertebrae_point_inx_src, vertebrae_point_inx_tar#surface_temp_1, surface_temp_2
 
+    def sample_vertebrae(self, pos1):
+        surface1 = np.copy(pos1)[:, 6]
+        # specific for vertebrae: sampling 4096 points
+        # and adding the 8 points for biomechanical constraint
+        L1 = np.argwhere(surface1 == 1).squeeze()
+        sample_idx1 = np.random.choice(L1, self.npoints, replace=False)
+        L2 = np.argwhere(surface1 == 2).squeeze()
+        sample_idx2 = np.random.choice(L2, self.npoints, replace=False)
+        L3 = np.argwhere(surface1 == 3).squeeze()
+        sample_idx3 = np.random.choice(L3, self.npoints, replace=False)
+        L4 = np.argwhere(surface1 == 4).squeeze()
+        sample_idx4 = np.random.choice(L4, self.npoints, replace=False)
+        L5 = np.argwhere(surface1 == 5).squeeze()
+        sample_idx5 = np.random.choice(L5, self.npoints, replace=False)
+        return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
 
     def __len__(self):
         return len(self.datapath)
-
 
 
 if __name__ == '__main__':
