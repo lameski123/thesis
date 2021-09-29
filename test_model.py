@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR, StepLR
+
+import utils
 from data import ModelNet40, SceneflowDataset
 from model import FlowNet3D
 import numpy as np
@@ -42,21 +44,11 @@ def _init_(args):
     os.system('cp main.py checkpoints' + '/' + args.exp_name + '/' + 'main.py.backup')
     os.system('cp model.py checkpoints' + '/' + args.exp_name + '/' + 'model.py.backup')
     os.system('cp data.py checkpoints' + '/' + args.exp_name + '/' + 'data.py.backup')
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
 
 
 if __name__ == "__main__":
-    args = {"exp_name": "flownet3d", "emb_dims": 512, "num_points": 4096,
-            "lr": 0.001, "momentum": 0.9, "seed": 100, "dropout": 0.5,
-            "batch_size": 1, "test_batch_size": 1, "epochs": 300,
-            "use_sgd": False, "eval": True, "cycle": False,
-            "gaussian_noise": False}
-    args = dotdict(args)
+    parser = utils.create_parser()
+    args = parser.parse_args()
 
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(args.seed)

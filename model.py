@@ -1,10 +1,9 @@
 import torch.nn as nn
-import torch
-import numpy as np
 import torch.nn.functional as F
-from util import PointNetSetAbstraction,PointNetFeaturePropogation,FlowEmbedding,PointNetSetUpConv
+import torch
 
-
+from utils import PointNetSetAbstraction, PointNetFeaturePropogation, FlowEmbedding, PointNetSetUpConv
+from utils import create_parser
 
 class FlowNet3D(nn.Module):
     def __init__(self,args):
@@ -56,28 +55,15 @@ class FlowNet3D(nn.Module):
         return sf
 
 
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-
 if __name__ == '__main__':
     import os
-    import torch
     import data
-    args = {"exp_name": "flownet3d", "emb_dims": 512, "num_points": 4096,
-            "lr": 0.001, "momentum": 0.9, "seed": 100, "dropout": 0.5,
-            "batch_size": 4, "test_batch_size": 1, "epochs": 50,
-            "use_sgd": False, "eval": False, "cycle": False,
-            "gaussian_noise": False}
-    args = dotdict(args)
+    parser = create_parser()
+    args = parser.parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     d = data.SceneflowDataset()
     pc1, pc2, color1, color2, flow, mask1 = d[0]
     # label = torch.randn(8,16)
     model = FlowNet3D(args)
-
     print(model)
 
