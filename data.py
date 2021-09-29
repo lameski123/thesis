@@ -14,6 +14,7 @@ from scipy.spatial.distance import minkowski
 import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+
 # Part of the code is referred from: https://github.com/charlesq34/pointnet
 
 def download():
@@ -60,6 +61,7 @@ def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.05):
     pointcloud += np.clip(sigma * np.random.randn(N, C), -1 * clip, clip)
     return pointcloud
 
+
 def farthest_subsample_points(pointcloud1, pointcloud2, num_subsampled_points=768):
     pointcloud1 = pointcloud1.T
     pointcloud2 = pointcloud2.T
@@ -75,165 +77,209 @@ def farthest_subsample_points(pointcloud1, pointcloud2, num_subsampled_points=76
     return pointcloud1[idx1, :].T, pointcloud2[idx2, :].T
 
 
-class ModelNet40(Dataset):
-    def __init__(self, num_points, num_subsampled_points = 768, partition='train', gaussian_noise=False, unseen=False, factor=4):
-        self.data, self.label = load_data(partition)
-        self.num_points = num_points
-        self.partition = partition
-        self.gaussian_noise = gaussian_noise
-        self.unseen = unseen
-        self.label = self.label.squeeze()
-        self.factor = factor
-        self.num_subsampled_points = num_subsampled_points
-        if num_points != num_subsampled_points:
-            self.subsampled = True
-        else:
-            self.subsampled = False
-        if self.unseen:
-            ######## simulate testing on first 20 categories while training on last 20 categories
-            if self.partition == 'test':
-                self.data = self.data[self.label>=20]
-                self.label = self.label[self.label>=20]
-            elif self.partition == 'train':
-                self.data = self.data[self.label<20]
-                self.label = self.label[self.label<20]
+def pad_data(surface2, L):
+    surface_temp_2 = np.zeros((4096))
+    surface_temp_2[:len(surface2)] = surface2.squeeze()
+    surface_temp_2[len(surface2):] = np.array([0] * (4096 - len(surface2))).squeeze()
+    return surface_temp_2
 
-    def __getitem__(self, item):
-        pointcloud = self.data[item][:self.num_points]
-        # if self.gaussian_noise:
-        #     pointcloud = jitter_pointcloud(pointcloud)
-        if self.partition != 'train':
-            np.random.seed(item)
-        anglex = np.random.uniform() * np.pi / self.factor
-        angley = np.random.uniform() * np.pi / self.factor
-        anglez = np.random.uniform() * np.pi / self.factor
 
-        cosx = np.cos(anglex)
-        cosy = np.cos(angley)
-        cosz = np.cos(anglez)
-        sinx = np.sin(anglex)
-        siny = np.sin(angley)
-        sinz = np.sin(anglez)
-        Rx = np.array([[1, 0, 0],
-                        [0, cosx, -sinx],
-                        [0, sinx, cosx]])
-        Ry = np.array([[cosy, 0, siny],
-                        [0, 1, 0],
-                        [-siny, 0, cosy]])
-        Rz = np.array([[cosz, -sinz, 0],
-                        [sinz, cosz, 0],
-                        [0, 0, 1]])
-        # 生成旋转矩阵
-        R_ab = Rx.dot(Ry).dot(Rz)
-        R_ba = R_ab.T
-        # 生成平移向量
-        translation_ab = np.array([np.random.uniform(-0.5, 0.5), np.random.uniform(-0.5, 0.5),
-                                   np.random.uniform(-0.5, 0.5)])
-        translation_ba = -R_ba.dot(translation_ab)
+def centeroid_(arr):
+    """get the centroid of a pointcloud"""
+    length = arr.shape[0]
+    sum_x = np.mean(arr[:, 0])
+    sum_y = np.mean(arr[:, 1])
+    sum_z = np.mean(arr[:, 2])
+    return sum_x, \
+            sum_y, \
+            sum_z
+def find_nearest_vector(array, value):
+    idx = np.array([np.linalg.norm(x+y+z) for (x,y,z) in np.abs(array-value)]).argmin()
+    return idx
 
-        pointcloud1 = pointcloud.T
-        rotation_ab = Rotation.from_euler('zyx', [anglez, angley, anglex])
-        pointcloud2 = rotation_ab.apply(pointcloud1.T).T + np.expand_dims(translation_ab, axis=1)
 
-        euler_ab = np.asarray([anglez, angley, anglex])
-        euler_ba = -euler_ab[::-1]
+def vertebrae_surface(surface):
+    L1 = np.argwhere(surface == 1).squeeze()
+    L2 = np.argwhere(surface == 2).squeeze()
+    L3 = np.argwhere(surface == 3).squeeze()
+    L4 = np.argwhere(surface == 4).squeeze()
+    L5 = np.argwhere(surface == 5).squeeze()
+    return L1, L2, L3, L4, L5
 
-        pointcloud1 = np.random.permutation(pointcloud1.T).T
-        pointcloud2 = np.random.permutation(pointcloud2.T).T
 
-        if self.gaussian_noise:
-            pointcloud1 = jitter_pointcloud(pointcloud1)
-            pointcloud2 = jitter_pointcloud(pointcloud2)
+def augment_data(flow, pos1, pos2):
+    to_augment = np.random.random()
+    angle_both = np.random.randint(0, 360)
+    angle_target = np.random.randint(-20, 20)
+    xyz = np.random.choice(["x", "y", "z"])
+    r = Rotation.from_euler(xyz, angle_both * np.pi / 180)
+    R = r.as_matrix()
+    r2 = Rotation.from_euler(xyz, angle_target * np.pi / 180)
+    R2 = r2.as_matrix()
+    # rotation
+    if to_augment > .5:
+        pos1_centroid = centeroid_(pos1[:, :3])
+        color1_centroid = centeroid_(pos1[:, 3:6])
+        pos2_centroid = centeroid_(pos2[:, :3])
+        color2_centroid = centeroid_(pos2[:, 3:6])
 
-        if self.subsampled:
-            pointcloud1, pointcloud2 = farthest_subsample_points(pointcloud1, pointcloud2,
-                                                                 num_subsampled_points=self.num_subsampled_points)
+        pos1[:, :3] -= pos1_centroid
+        pos2[:, :3] -= pos2_centroid
+        pos1[:, 3:6] -= color1_centroid
+        pos2[:, 3:6] -= color2_centroid
 
-        return pointcloud1.astype('float32'), pointcloud2.astype('float32'), R_ab.astype('float32'), \
-               translation_ab.astype('float32'), R_ba.astype('float32'), translation_ba.astype('float32'), \
-               euler_ab.astype('float32'), euler_ba.astype('float32')
+        # rotate both source and target:
+        # pos1[:, :3] = np.dot(pos1[:, :3], R)
+        # pos1[:, 3:6] = np.dot(pos1[:, 3:6], R)
+        #
+        # pos2[:, :3] = np.dot(pos2[:, :3], R)
+        # pos2[:, 3:6] = np.dot(pos2[:, 3:6], R)
 
-    def __len__(self):
-        return self.data.shape[0]
+        # only target slightly rotated
+        pos2[:, :3] = np.dot(pos2[:, :3], R2)
+        pos2[:, 3:6] = np.dot(pos2[:, 3:6], R2)
+
+        pos1[:, :3] += pos1_centroid
+        pos2[:, :3] += pos2_centroid
+        pos1[:, 3:6] += color1_centroid
+        pos2[:, 3:6] += color2_centroid
+
+        flow = pos2[:, :3] - pos1[:, :3]
+    to_augment = np.random.random()
+    # noise
+    sample_x = np.random.normal(0, 0.002, pos2.shape[0])
+    sample_y = np.random.normal(0, 0.002, pos2.shape[0])
+    sample_z = np.random.normal(0, 0.002, pos2.shape[0])
+    indexes = np.random.random(pos2.shape[0] // 3).astype(int)
+    # adding noice
+    if to_augment > .5:
+        pos2[indexes, 0] += sample_x[indexes]
+        pos2[indexes, 1] += sample_y[indexes]
+        pos2[indexes, 2] += sample_z[indexes]
+        pos2[indexes, 3] += sample_x[indexes]
+        pos2[indexes, 4] += sample_y[indexes]
+        pos2[indexes, 5] += sample_z[indexes]
+
+        flow = pos2[:, :3] - pos1[:, :3]
+    return flow
+
+
+def read_numpy_file(fp):
+    data = np.load(fp)
+    pos1 = data["pc1"].astype('float32')
+    pos2 = data["pc2"].astype('float32')
+    flow = data["flow"].astype('float32')
+    constraint = data["cstPts"].astype('int')
+    return constraint, flow, pos1, pos2
 
 
 class SceneflowDataset(Dataset):
-    def __init__(self, npoints=4096, root='./point_clouds', train=True):
-        #train=1 take train part
-        #train=2 take test part
-        #train=0 take whole dataset
+    def __init__(self, npoints=4096, root='./spine_clouds', train=True):
+        """
+        :param npoints: number of points of input point clouds
+        :param root: folder of data in .npz format
+        :param train: True if we use the training part of the data, False if we use validation/test
+        """
         self.npoints = npoints
         self.train = train
-        if self.train==False:
-            self.root = "./point_clouds_test"
-        else:
-            self.root = root
+        ##in case we want to test on different data
+        # if self.train==False:
+        #     self.root = "./spine_clouds"
+        # else:
+        self.root = root
 
         self.datapath = glob.glob(os.path.join(self.root, '*.npz'))
-        # if self.train == True:
-        #     self.datapath = self.datapath[:-8]
-        # else:
-        #     self.datapath = self.datapath[-8:]
-        # self.cache = {}
-        # self.cache_size = 30000
+        #train
+        if self.train == True:
+            self.datapath = self.datapath[:-8]
+        #validation
+        else:
+            self.datapath = self.datapath[-8:]
 
 
     def __getitem__(self, index):
-        # if index in self.cache:
-        #     pos1_, pos2_, flow_ = self.cache[index]
-        # else:
         fn = self.datapath[index]
-
         with open(fn, 'rb') as fp:
-            data = np.load(fp)
-            pos1 = data["pc1"].astype('float32')
-            pos2 = data["pc2"].astype('float32')
-            flow = data["flow"].astype('float32')
+            constraint, flow, pos1, pos2 = read_numpy_file(fp)
 
-        # if len(self.cache) < self.cache_size:
-        #     self.cache[index] = (pos1, pos2, flow)
-        # print(pos1.shape, pos2.shape, flow.shape)
-        n1 = pos1.shape[0]
-        n2 = pos2.shape[0]
+            # augmentation
+            if self.train==True:
+                flow = augment_data(flow, pos1, pos2)
+
         np.random.seed(100)
-        if n1 >= self.npoints:
-            sample_idx1 = np.random.choice(n1, self.npoints, replace=False)
-        else:
-            sample_idx1 = np.concatenate((np.arange(n1), np.random.choice(n1, self.npoints - n1, replace=True)),
-                                         axis=-1)
-        if n2 >= self.npoints:
-            sample_idx2 = np.random.choice(n2, self.npoints, replace=False)
-        else:
-            sample_idx2 = np.concatenate((np.arange(n2), np.random.choice(n2, self.npoints - n2, replace=True)),
-                                         axis=-1)
 
-        pos1_ = np.copy(pos1)[sample_idx1, :3]
-        pos2_ = np.copy(pos2)[sample_idx2, :3]
-        flow_ = np.copy(flow)[sample_idx1, :]
+        L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
+            pos1)
+        #TODO: PROBLEM WITH POINT SELECTION WORK ON IT!!!!
 
-        color1 = np.copy(pos1)[sample_idx1, 3:6]
-        color2 = np.copy(pos1)[sample_idx1, 3:6]
-        # color1 = np.zeros([self.npoints, 3])
-        # color2 = np.zeros([self.npoints, 3])
+        sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
+                                      sample_idx3, sample_idx4,
+                                      sample_idx5), axis=0).astype(int)
+        # take every 5th point so that every vertebra has equal number of points
+        sample_idx_source = sample_idx_[::5]
+        # make space for the constraint points
+        sample_idx_source = np.delete(sample_idx_source, [10, 1200, 1201, 2000, 2001, 3000, 3001, 4000])
+        # add the constraint points
+        constraint_points = np.array([L1[constraint[0],...],
+                                            L2[constraint[1],...],
+                                            L2[constraint[2],...],
+                                            L3[constraint[3],...],
+                                            L3[constraint[4],...],
+                                            L4[constraint[5],...],
+                                            L4[constraint[6],...],
+                                            L5[constraint[7],...]])
+
+        sample_idx_source = np.concatenate((sample_idx_source, constraint_points),axis=0).astype(int)
+
+
+        np.random.seed(20)
+        L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
+            pos2)
+
+        sample_idx_ = np.concatenate((sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5), axis=0)
+
+        sample_idx_target = sample_idx_[::5]
+
+        pos1_ = np.copy(pos1)[sample_idx_source, :3]*1e+3
+
+        pos2_ = np.copy(pos2)[sample_idx_target, :3]*1e+3
+        flow_ = np.copy(flow)[sample_idx_source, :]*1e+3
+
+        color1 = np.copy(pos1)[sample_idx_source, 3:6]*1e+3
+        color2 = np.copy(pos2)[sample_idx_target, 3:6]*1e+3
+
+        surface1 = np.copy(pos1)[sample_idx_source, 6]
+        # specific for vertebrae:
+        L1, L2, L3, L4, L5 = vertebrae_surface(surface1)
+
+        vertebrae_point_inx_src = [L1, L2, L3, L4, L5]
+        surface2 = np.copy(pos2)[sample_idx_target, 6]
+        L1, L2, L3, L4, L5 = vertebrae_surface(surface2)
+
+        vertebrae_point_inx_tar = [L1, L2, L3, L4, L5]
+########################################################################
         mask = np.ones([self.npoints])
-        surface1 = np.copy(pos1)[sample_idx1, 6]
-        surface_temp_1 = np.zeros_like(surface1)
-        surface1 = np.argwhere(surface1==1)
-        surface_temp_1[:len(surface1)] = surface1.squeeze()
-        surface_temp_1[len(surface1):] = np.array([surface1[0]]*(self.npoints-surface1.shape[0])).squeeze()
 
-        surface2 = np.copy(pos2)[sample_idx2, 6]
-        surface_temp_2 = np.zeros_like(surface2)
-        surface2 = np.argwhere(surface2==1)
-        surface_temp_2[:len(surface2)] = surface2.squeeze()
-        surface_temp_2[len(surface2):] = np.array([surface2[0]] * (self.npoints - surface2.shape[0])).squeeze()
+        return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095-8, -1)]), vertebrae_point_inx_src, vertebrae_point_inx_tar#surface_temp_1, surface_temp_2
 
-        return pos1_, pos2_, color1, color2, flow_, mask, surface_temp_1, surface_temp_2
-
+    def sample_vertebrae(self, pos1):
+        surface1 = np.copy(pos1)[:, 6]
+        # specific for vertebrae: sampling 4096 points
+        # and adding the 8 points for biomechanical constraint
+        L1 = np.argwhere(surface1 == 1).squeeze()
+        sample_idx1 = np.random.choice(L1, self.npoints, replace=False)
+        L2 = np.argwhere(surface1 == 2).squeeze()
+        sample_idx2 = np.random.choice(L2, self.npoints, replace=False)
+        L3 = np.argwhere(surface1 == 3).squeeze()
+        sample_idx3 = np.random.choice(L3, self.npoints, replace=False)
+        L4 = np.argwhere(surface1 == 4).squeeze()
+        sample_idx4 = np.random.choice(L4, self.npoints, replace=False)
+        L5 = np.argwhere(surface1 == 5).squeeze()
+        sample_idx5 = np.random.choice(L5, self.npoints, replace=False)
+        return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
 
     def __len__(self):
         return len(self.datapath)
-
 
 
 if __name__ == '__main__':
@@ -251,17 +297,20 @@ if __name__ == '__main__':
 
     tic = time.time()
     for i, data in enumerate(data_loader):
-        pc1, pc2, col1, col2, flow, mask, surface1, surface2= data
-        position1 = np.where(surface1 == 1)[0]
-        ind1 = torch.tensor(position1).cuda()
-        position2 = np.where(surface2 == 1)[0]
-        ind2 = torch.tensor(position2).cuda()
-        print(pc1.shape)
-        pc1 = torch.tensor(pc1).cuda().transpose(2, 1).contiguous()
-        pc2 = torch.tensor(pc2).cuda().transpose(2, 1).contiguous()
-        a = torch.index_select(pc1, 2, ind1).cuda()
-        b = torch.index_select(pc2, 2, ind2).cuda()
-        print(a.shape, b.shape, flow.shape)
+        pc1, pc2, col1, col2, flow, mask, surface1, surface2 = data
+        # print(surface1)
+        # print(surface2)
+        # position1 = np.where(surface1 == 1)[0]
+        # ind1 = torch.tensor(position1).cuda()
+        # position2 = np.where(surface2 == 1)[0]
+        # ind2 = torch.tensor(position2).cuda()
+        # print(pc1.shape)
+        # pc1 = torch.tensor(pc1).cuda().transpose(2, 1).contiguous()
+        # pc2 = torch.tensor(pc2).cuda().transpose(2, 1).contiguous()
+        # a = torch.index_select(pc1, 2, ind1).cuda()
+        # b = torch.index_select(pc2, 2, ind2).cuda()
+        # print(a.shape, b.shape, flow.shape)
+        print(pc1.shape, flow.shape)
         break
 
         # mlab.figure(bgcolor=(1, 1, 1))
