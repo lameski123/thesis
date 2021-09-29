@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from lib import pointnet2_utils as pointutils
+from pointnet2 import pointnet2_utils as pointutils
 
 
 def square_distance(src, dst):
@@ -117,7 +117,6 @@ def query_ball_point(radius, nsample, xyz, new_xyz):
     return group_idx, cnt
 
 
-# bn_decay, use_nchw=False
 class PointNetSetAbstraction(nn.Module):
     def __init__(self, npoint, radius, nsample, in_channel, mlp, mlp2=None, group_all=False,
                  bn=True, pooling='max', knn=False, use_xyz=True):
