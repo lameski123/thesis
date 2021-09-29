@@ -72,6 +72,7 @@ class GatherOperation(Function):
 
 gather_operation = GatherOperation.apply
 
+
 class KNN(Function):
 
     @staticmethod
@@ -99,7 +100,10 @@ class KNN(Function):
     @staticmethod
     def backward(ctx, a=None, b=None):
         return None, None, None
+
+
 knn = KNN.apply
+
 
 class ThreeNN(Function):
 
@@ -257,14 +261,14 @@ ball_query = BallQuery.apply
 
 
 class QueryAndGroup(nn.Module):
-    def __init__(self, radius: float, nsample: int, use_xyz: bool = True):
+    def __init__(self, radius: float, nsample: int, use_xyz: bool = True, knn: bool = False):
         """
         :param radius: float, radius of ball
         :param nsample: int, maximum number of features to gather in the ball
         :param use_xyz:
         """
         super().__init__()
-        self.radius, self.nsample, self.use_xyz = radius, nsample, use_xyz
+        self.radius, self.nsample, self.use_xyz, self.knn = radius, nsample, use_xyz, knn
 
     def forward(self, xyz: torch.Tensor, new_xyz: torch.Tensor, features: torch.Tensor = None) -> Tuple[torch.Tensor]:
         """
@@ -274,7 +278,11 @@ class QueryAndGroup(nn.Module):
         :return:
             new_features: (B, 3 + C, npoint, nsample)
         """
-        idx = ball_query(self.radius, self.nsample, xyz, new_xyz)
+        if self.knn:
+            _, idx = knn(self.nsample, xyz, new_xyz)
+        else:
+            idx = ball_query(self.radius, self.nsample, xyz, new_xyz)
+
         xyz_trans = xyz.transpose(1, 2).contiguous()
         grouped_xyz = grouping_operation(xyz_trans, idx)  # (B, 3, npoint, nsample)
         grouped_xyz -= new_xyz.transpose(1, 2).unsqueeze(-1)
