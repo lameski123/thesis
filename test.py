@@ -1,6 +1,10 @@
 from __future__ import print_function
+
+import os
+
 import numpy as np
 import torch
+import wandb
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -10,7 +14,7 @@ from data import SceneflowDataset
 from model import FlowNet3D
 
 
-def test_one_epoch(net, test_loader, loss_opt):
+def test_one_epoch(net, test_loader, loss_opt, save_results=False, args=None):
     net.eval()
 
     total_loss = 0
@@ -36,20 +40,34 @@ def test_one_epoch(net, test_loader, loss_opt):
 
         total_loss += loss.item() * batch_size
 
+        if save_results:
+            result_path = os.path.join('checkpoints/', args.exp_name, 'test_result/')
+            os.makedirs(result_path, exist_ok=True)
+            n = pc1.shape[0]
+            for j in range(n):
+                idx = i*n + j
+                np.savetxt(os.path.join(result_path, f"predicted_{idx}.txt"), (pc1[j, :, :] + flow_pred[j, :, :]).cpu())
+                np.savetxt(os.path.join(result_path, f"source_{idx}.txt"), pc1[j, :, :].detach().cpu())
+                np.savetxt(os.path.join(result_path, f"target_{idx}.txt"), pc2[j, :, :].detach().cpu())
+
     return total_loss * 1.0 / num_examples
 
 
 def test(args, net, test_loader, textio):
 
-    test_loss, epe = test_one_epoch(net, test_loader, args.loss)
+    with torch.no_grad():
+        test_loss = test_one_epoch(net, test_loader, args.loss, save_results=True, args=args)
 
     textio.cprint('==FINAL TEST==')
-    textio.cprint('mean test loss: %f\tEPE 3D: %f'%(test_loss, epe))
+    textio.cprint(f'mean test loss: {test_loss}')
 
 
 if __name__ == "__main__":
+
     parser = utils.create_parser()
     args = parser.parse_args()
+
+    assert os.path.exists(args.model_path), f'model path {args.model_path} does not exist'
 
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(args.seed)
@@ -60,39 +78,21 @@ if __name__ == "__main__":
     boardio = []
     utils.create_paths(args)
 
+    wandb.init(project='spine_flownet', config=args)
+
     textio = utils.IOStream('checkpoints/' + args.exp_name + '/run.log')
     textio.cprint(str(args))
 
     net = FlowNet3D(args).cuda()
 
-    net.load_state_dict(torch.load("./checkpoints/flownet3d/models/model_spine_loss_rigid_DATA_TR_dif_rand.best.t7"))
+    net.load_state_dict(torch.load(args.model_path))
     net.eval()
     flow_pred = []
     flows = []
     pcs = []
 
-    # for i in range(10):
-    test_loader = DataLoader(
-        SceneflowDataset(npoints=args.num_points, train=False),
-        batch_size=args.test_batch_size, shuffle=True, drop_last=False)
-    for i, data in enumerate(test_loader):
-        # wandb.init(config=args)
-        pc1, pc2, color1, color2, flow, mask1, position1, position2 = data
-        pc1 = pc1.cuda().transpose(2, 1).contiguous()
-        pc2 = pc2.cuda().transpose(2, 1).contiguous()
-        color1 = color1.cuda().transpose(2, 1).contiguous().float()
-        color2 = color2.cuda().transpose(2, 1).contiguous().float()
-        flow = flow.cuda().transpose(2, 1).contiguous()
-        mask1 = mask1.cuda().float()
-        flow_pred = net(pc1, pc2, color1, color2)
-        pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-        pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-        flow = flow.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-        color1 = color1.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-        color2 = color2.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-        flow_min = flow.min()
-        flow_max = flow.max()
-        flow_pred = flow_pred.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
-        np.savetxt("test_result_spine_"+str(i)+".txt", pc1[:,:3]+flow_pred)
-        np.savetxt("test_source_spine_"+str(i)+".txt", pc1[:,:3])
-        np.savetxt("test_target_spine_"+str(i)+".txt", pc2[:,:3])
+    test_set = SceneflowDataset(npoints=4096, train=False, root=args.dataset_path)
+    test_loader = DataLoader(test_set, batch_size=args.batch_size, drop_last=False)
+
+    test(args, net, test_loader, textio)
+
