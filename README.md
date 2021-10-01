@@ -17,10 +17,20 @@ git clone https://github.com/lameski123/thesis
 git checkout thesis
 pip install -r requirements.txt
 pip install chamferdist
-git submodule update --remote
-cd flownet3d_pytorch/lib
+cd pointnet2
 python setup.py install
 ```
 
+# Train
+Training is done using the train.py file. you will need a WandB account to see the results. there are a couple of 
+options for loss. see the z`options.py` file for that. 
+
+`python train.py --dataset_path %DATASET_PATH% --loss rigidity`
+
+# Test
+
+Test is done using the test.py file. two arguments are mandatory, data path and the save model path. 
+
+`python test.py --dataset_path %DATASET_PATH% ----model_path %MODEL_PATH%`
 
 
