@@ -3,6 +3,8 @@
 
 from __future__ import print_function
 
+import os
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -87,6 +89,22 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
+    try:
+        from polyaxon_helper import (
+            get_outputs_path,
+            get_data_paths,
+        )
+
+        base_path = get_data_paths()
+        print("You are running on the cluster :)")
+        args.dataset_path = base_path['data1'] + args.dataset_path
+        args.checkpoints_dir = get_outputs_path()
+        print(args)
+    except Exception as e:
+        print(e)
+        args.checkpoints_dir = 'checkpoints/' + "flownet3d/"
+        print("You are Running on the local Machine")
+
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(100)
     torch.cuda.manual_seed_all(100)
@@ -94,12 +112,13 @@ def main():
 
     utils.create_paths(args)
 
-    textio = utils.IOStream('checkpoints/' + "flownet3d" + '/run.log')
+    textio = utils.IOStream(os.path.join(args.checkpoints_dir, 'run.log'))
     textio.cprint(str(args))
 
     net = FlowNet3D(args).cuda()
     net.apply(utils.weights_init)
 
+    wandb.login(key=args.wandb_key)
     wandb.init(project='spine_flownet', config=args)
 
     train_set = SceneflowDataset(npoints=4096, train=True, root=args.dataset_path)

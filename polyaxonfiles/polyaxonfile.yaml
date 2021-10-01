@@ -1,0 +1,49 @@
+---
+version: 1
+
+kind: experiment
+
+framework: pytorch
+
+tags:
+  - CUT3D
+  - NoFakePool
+  - MaskedContrastiveLoss
+  - CLAHE
+  - DenoisedTrus
+  - AugmentData (affine, deformable, flip)
+#  - ApplyMaskOnFake
+
+
+build:
+  build_steps:
+    - "apt update"
+    - "apt install -y libglib2.0-0 libsm6 libxext6 libxrender-dev git"
+    - "apt install -y build-essential"
+    - "pip install -r requirements_cluster.txt"
+    - "pip install chamferdist"
+    - "cd ./pointnet2 && python setup.py install"
+  image: "pytorch/pytorch:1.9.0-cuda11.1-cudnn8-devel"
+
+environment:
+  resources:
+    cpu:
+      requests: 3
+      limits: 4
+    memory:
+      requests: 20000
+      limits: 32000
+    gpu:
+      requests: 1
+      limits: 1
+  node_selector:
+    gpuMemory: "12"
+
+params:
+  dataset_path: 'Spine_Flownet/spine_clouds/'
+  loss: rigidity
+  wandb_key: d3424a60f5e39087781fde8ff973ee92dd6da70d
+
+run:
+    cmd: python train.py --dataset_path {{ dataset_path }} --loss {{ loss }} --wandb-key {{ wandb_key }}
+

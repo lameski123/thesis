@@ -78,6 +78,7 @@ if __name__ == "__main__":
     boardio = []
     utils.create_paths(args)
 
+    wandb.login(key=args.wandb_key)
     wandb.init(project='spine_flownet', config=args)
 
     textio = utils.IOStream('checkpoints/' + args.exp_name + '/run.log')
