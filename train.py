@@ -43,9 +43,9 @@ def train(args, net, train_loader, test_loader, textio):
             best_test_loss = test_loss
             textio.cprint('best test loss till now: %f'%test_loss)
             if torch.cuda.device_count() > 1:
-                torch.save(net.module.state_dict(), 'checkpoints/%s/models/model_spine_bio.best.t7' % args.exp_name)
+                torch.save(net.module.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
             else:
-                torch.save(net.state_dict(), 'checkpoints/%s/models/model_spine_bio.best.t7' % args.exp_name)
+                torch.save(net.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
 
         scheduler.step()
         wandb.log({"Train loss": train_loss})
@@ -89,21 +89,7 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
-    try:
-        from polyaxon_helper import (
-            get_outputs_path,
-            get_data_paths,
-        )
-
-        base_path = get_data_paths()
-        print("You are running on the cluster :)")
-        args.dataset_path = base_path['data1'] + args.dataset_path
-        args.checkpoints_dir = get_outputs_path()
-        print(args)
-    except Exception as e:
-        print(e)
-        args.checkpoints_dir = 'checkpoints/' + "flownet3d/"
-        print("You are Running on the local Machine")
+    args = utils.update_args_for_cluster(args)
 
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(100)

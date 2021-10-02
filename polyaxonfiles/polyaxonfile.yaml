@@ -16,14 +16,19 @@ tags:
 
 
 build:
-  build_steps:
-    - "apt update"
-    - "apt install -y libglib2.0-0 libsm6 libxext6 libxrender-dev git"
-    - "apt install -y build-essential"
-    - "pip install -r requirements_cluster.txt"
-    - "pip install chamferdist"
-    - "cd ./pointnet2 && python setup.py install"
-  image: "pytorch/pytorch:1.9.0-cuda11.1-cudnn8-devel"
+#  build_steps:
+#    - "apt update"
+#    - "apt install -y libglib2.0-0 libsm6 libxext6 libxrender-dev git"
+#    - "git clone https://github.com/lameski123/thesis /pointnet2_lib"
+#    - "cd /pointnet2_lib/pointnet2 && python setup.py install"
+#    - "pip install -r requirements.txt"
+#    - "pip install chamferdist"
+  image: "mfazampour/spine_flownet"
+#  environment:
+#    resources:
+#      gpu:
+#        requests: 1
+#        limits: 1
 
 environment:
   resources:
@@ -36,11 +41,11 @@ environment:
     gpu:
       requests: 1
       limits: 1
-  node_selector:
-    gpuMemory: "12"
+#  node_selector:
+#    gpuMemory: "24"
 
 params:
-  dataset_path: 'Spine_Flownet/spine_clouds/'
+  dataset_path: '/data/Spine_Flownet/spine_clouds/'
   loss: rigidity
   wandb_key: d3424a60f5e39087781fde8ff973ee92dd6da70d
 
