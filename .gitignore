@@ -1,1 +1,4 @@
 .idea
+spine_clouds/
+venv/
+__pycache__/
