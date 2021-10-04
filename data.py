@@ -257,10 +257,11 @@ class SceneflowDataset(Dataset):
         L1, L2, L3, L4, L5 = vertebrae_surface(surface2)
 
         vertebrae_point_inx_tar = [L1, L2, L3, L4, L5]
-########################################################################
+        ########################################################################
         mask = np.ones([self.npoints])
 
-        return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095-8, -1)]), vertebrae_point_inx_src, vertebrae_point_inx_tar#surface_temp_1, surface_temp_2
+        return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095 - 8, -1)]), \
+               vertebrae_point_inx_src, vertebrae_point_inx_tar, fn.split('/')[-1].split('.')[0]
 
     def sample_vertebrae(self, pos1):
         surface1 = np.copy(pos1)[:, 6]
