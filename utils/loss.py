@@ -41,8 +41,8 @@ def biomechanical_loss(constraint, flow, flow_pred, idx, pc1):
     predicted = pc1[idx, :, constraint[idx]] + flow_pred[idx, :, constraint[idx]]
     loss = torch.tensor([0.0], device=flow.device, dtype=flow.dtype)
     for j in range(0, constraint.size(1) - 1, 2):
-        loss += 1e-2 * torch.abs(torch.linalg.norm(source[:, j], source[:, j + 1]) -
-                                 torch.linalg.norm(predicted[:, j], predicted[:, j + 1]))
+        loss += 1e-2 * torch.abs(torch.linalg.norm(source[:, j] - source[:, j + 1]) -
+                                 torch.linalg.norm(predicted[:, j] - predicted[:, j + 1]))
     return loss
 
 
