@@ -17,7 +17,7 @@ class IOStream:
 
 
 def read_batch_data(data):
-    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2 = data
+    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2, file_name = data
     pc1 = pc1.cuda().transpose(2, 1).contiguous().float()
     pc2 = pc2.cuda().transpose(2, 1).contiguous().float()
     color1 = color1.cuda().transpose(2, 1).contiguous().float()
@@ -25,7 +25,7 @@ def read_batch_data(data):
     flow = flow.cuda().transpose(2, 1).contiguous()
     mask1 = mask1.cuda().float()
     constraint = constraint.cuda()
-    return color1, color2, constraint, flow, pc1, pc2, position1
+    return color1, color2, constraint, flow, pc1, pc2, position1, file_name
 
 
 def weights_init(m):

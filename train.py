@@ -18,7 +18,7 @@ from tqdm import tqdm
 import utils
 from data import SceneflowDataset
 from model import FlowNet3D
-from test import test_one_epoch
+from test import test_one_epoch, test
 
 
 def train(args, net, train_loader, test_loader, textio):
@@ -33,56 +33,54 @@ def train(args, net, train_loader, test_loader, textio):
 
     best_test_loss = np.inf
     for epoch in range(args.epochs):
-        textio.cprint('==epoch: %d, learning rate: %f=='%(epoch, opt.param_groups[0]['lr']))
-        train_loss = train_one_epoch(net, train_loader, opt, args.loss)
-        textio.cprint('mean train EPE loss: %f'%train_loss)
+        textio.cprint('==epoch: %d, learning rate: %f==' % (epoch, opt.param_groups[0]['lr']))
+        train_losses = train_one_epoch(net, train_loader, opt, args.loss)
+        textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
-        test_loss = test_one_epoch(net, test_loader, args.loss)
-        textio.cprint('mean test loss: %f'%(test_loss))
+        test_losses = test_one_epoch(net, test_loader, wandb_table=None)
+        test_loss = test_losses['total_loss']
+        textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
             best_test_loss = test_loss
-            textio.cprint('best test loss till now: %f'%test_loss)
+            textio.cprint('best test loss till now: %f' % test_loss)
             if torch.cuda.device_count() > 1:
                 torch.save(net.module.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
             else:
                 torch.save(net.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
 
         scheduler.step()
-        wandb.log({"Train loss": train_loss})
-        wandb.log({"Val loss": test_loss})
-        # print(scheduler.get_last_lr())
+        wandb.log({'Train': train_losses, 'Validation': test_losses})
+
         args.lr = scheduler.get_last_lr()[0]
 
 
 def train_one_epoch(net, train_loader, opt, loss_opt):
     net.train()
-    num_examples = 0
     total_loss = 0
-
+    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total = 0.0, 0.0, 0.0, 0.0
     for i, data in tqdm(enumerate(train_loader), total=len(train_loader)):
-        color1, color2, constraint, flow, pc1, pc2, position1 = utils.read_batch_data(data)
-
+        color1, color2, constraint, flow, pc1, pc2, position1, fn = utils.read_batch_data(data)
         batch_size = pc1.size(0)
         opt.zero_grad()
-        num_examples += batch_size
         flow_pred = net(pc1, pc2, color1, color2)
-        loss = F.mse_loss(flow_pred.float(), flow.float())
-        if "biomechanical" in loss_opt:
-            for idx in range(batch_size):
-                loss += utils.biomechanical_loss(constraint, flow, flow_pred, idx, pc1)[0]
-        if "rigidity" in loss_opt:
-            loss += utils.rigidity_loss(flow, flow_pred, pc1, position1)
-        if "chamfer" in loss_opt:
-            loss += utils.chamfer_loss(flow, flow_pred, pc1, pc2)
+        bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
+                                                                                loss_opt, pc1, pc2, position1)
+        mse_loss_total += mse_loss.item() / len(train_loader)
+        bio_loss_total += bio_loss.item() / len(train_loader)
+        rig_loss_total += rig_loss.item() / len(train_loader)
+        chamfer_loss_total += chamfer_loss.item() / len(train_loader)
+        total_loss += loss.item() / len(train_loader)
 
         loss.backward()
         opt.step()
-        total_loss += loss.item() * batch_size
-
-        if i % 270 == 0:
+        if i % 50 == 0:
             utils.plot_pointcloud(flow_pred, pc1, pc2)
+        # for j in range(train_loader.batch_size):
+        #     utils.plot_pointcloud(flow_pred[j:j+1, ...], pc1[j:j+1, ...], pc2[j:j+1, ...], fn[j:j+1])
 
-    return total_loss * 1.0 / num_examples
+    losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
+              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total}
+    return losses
 
 
 def main():
@@ -107,18 +105,20 @@ def main():
     wandb.login(key=args.wandb_key)
     wandb.init(project='spine_flownet', config=args)
 
-    train_set = SceneflowDataset(npoints=4096, train=True, root=args.dataset_path)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-    test_set = SceneflowDataset(npoints=4096, train=False, root=args.dataset_path)
-    test_loader = DataLoader(test_set, batch_size=args.batch_size,  drop_last=False)
+    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path)
+    val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
 
     if torch.cuda.device_count() > 1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
-    # wandb.watch(net, log_freq=100)
-    train(args, net, train_loader, test_loader, textio)
+
+    train(args, net, train_loader, val_loader, textio)
+
+    # test after training
+    test(args, net, textio)
 
 
 if __name__ == '__main__':
     main()
-

@@ -6,29 +6,12 @@ kind: experiment
 framework: pytorch
 
 tags:
-  - CUT3D
-  - NoFakePool
-  - MaskedContrastiveLoss
-  - CLAHE
-  - DenoisedTrus
-  - AugmentData (affine, deformable, flip)
-#  - ApplyMaskOnFake
+  - Full_Spine
 
 
 build:
-#  build_steps:
-#    - "apt update"
-#    - "apt install -y libglib2.0-0 libsm6 libxext6 libxrender-dev git"
-#    - "git clone https://github.com/lameski123/thesis /pointnet2_lib"
-#    - "cd /pointnet2_lib/pointnet2 && python setup.py install"
-#    - "pip install -r requirements.txt"
-#    - "pip install chamferdist"
   image: "mfazampour/spine_flownet"
-#  environment:
-#    resources:
-#      gpu:
-#        requests: 1
-#        limits: 1
+
 
 environment:
   resources:
@@ -41,8 +24,8 @@ environment:
     gpu:
       requests: 1
       limits: 1
-#  node_selector:
-#    gpuMemory: "24"
+  node_selector:
+    gpuMemory: "12"
 
 params:
   dataset_path: '/data/Spine_Flownet/spine_clouds/'
