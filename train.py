@@ -18,7 +18,7 @@ from tqdm import tqdm
 import utils
 from data import SceneflowDataset
 from model import FlowNet3D
-from test import test_one_epoch
+from test import test_one_epoch, test
 
 
 def train(args, net, train_loader, test_loader, textio):
@@ -105,16 +105,19 @@ def main():
     wandb.login(key=args.wandb_key)
     wandb.init(project='spine_flownet', config=args)
 
-    train_set = SceneflowDataset(npoints=4096, train=True, root=args.dataset_path)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-    test_set = SceneflowDataset(npoints=4096, train=False, root=args.dataset_path)
-    test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
+    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path)
+    val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
 
     if torch.cuda.device_count() > 1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
 
-    train(args, net, train_loader, test_loader, textio)
+    train(args, net, train_loader, val_loader, textio)
+
+    # test after training
+    test(args, net, textio)
 
 
 if __name__ == '__main__':

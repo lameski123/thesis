@@ -145,7 +145,7 @@ def run_cpd(data_batch):
 
 
 def main(dataset_path):
-    test_set = SceneflowDataset(npoints=4096, train=True, root=dataset_path)
+    test_set = SceneflowDataset(npoints=4096, mode="train", root=dataset_path)
 
     for data in test_set:
         run_cpd(data)

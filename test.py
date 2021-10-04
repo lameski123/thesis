@@ -52,17 +52,7 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
     return losses
 
 
-def test(args, net, test_loader, textio, test_table: wandb.Table):
-
-    with torch.no_grad():
-        test_loss = test_one_epoch(net, test_loader, save_results=True, args=args, wandb_table=test_table)
-
-    textio.cprint('==FINAL TEST==')
-    textio.cprint(f'mean test loss: {test_loss}')
-
-
-if __name__ == "__main__":
-
+def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
@@ -87,20 +77,30 @@ if __name__ == "__main__":
 
     net.load_state_dict(torch.load(args.model_path))
     net.eval()
-    flow_pred = []
-    flows = []
-    pcs = []
 
-    test_set = SceneflowDataset(npoints=4096, train=False, root=args.dataset_path)
+    test(args, net, textio)
+
+
+def test(args, net, textio):
+
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
-
     columns = ['id', "mse loss", "biomechanical loss", "Chamfer loss", 'rigidity loss']
     test_table = wandb.Table(columns=columns)
 
-    test(args, net, test_loader, textio, test_table)
+    with torch.no_grad():
+        test_loss = test_one_epoch(net, test_loader, save_results=True, args=args, wandb_table=test_table)
+
+    textio.cprint('==FINAL TEST==')
+    textio.cprint(f'mean test loss: {test_loss}')
 
     test_data_at.add(test_table, "test prediction")
     wandb.run.log_artifact(test_data_at)
+
+
+if __name__ == "__main__":
+    main()
+
 

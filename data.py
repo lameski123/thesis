@@ -15,6 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 
+
 # Part of the code is referred from: https://github.com/charlesq34/pointnet
 
 def download():
@@ -72,7 +73,7 @@ def farthest_subsample_points(pointcloud1, pointcloud2, num_subsampled_points=76
     idx1 = nbrs1.kneighbors(random_p1, return_distance=False).reshape((num_subsampled_points,))
     nbrs2 = NearestNeighbors(n_neighbors=num_subsampled_points, algorithm='auto',
                              metric=lambda x, y: minkowski(x, y), n_jobs=1).fit(pointcloud2)
-    random_p2 = random_p1 #np.random.random(size=(1, 3)) + np.array([[500, 500, 500]]) * np.random.choice([1, -1, 2, -2])
+    random_p2 = random_p1  # np.random.random(size=(1, 3)) + np.array([[500, 500, 500]]) * np.random.choice([1, -1, 2, -2])
     idx2 = nbrs2.kneighbors(random_p2, return_distance=False).reshape((num_subsampled_points,))
     return pointcloud1[idx1, :].T, pointcloud2[idx2, :].T
 
@@ -91,10 +92,12 @@ def centeroid_(arr):
     sum_y = np.mean(arr[:, 1])
     sum_z = np.mean(arr[:, 2])
     return sum_x, \
-            sum_y, \
-            sum_z
+           sum_y, \
+           sum_z
+
+
 def find_nearest_vector(array, value):
-    idx = np.array([np.linalg.norm(x+y+z) for (x,y,z) in np.abs(array-value)]).argmin()
+    idx = np.array([np.linalg.norm(x + y + z) for (x, y, z) in np.abs(array - value)]).argmin()
     return idx
 
 
@@ -173,44 +176,57 @@ def read_numpy_file(fp):
     return constraint, flow, pos1, pos2
 
 
+def _get_spine_number(path: str):
+    name: str = path.split('/')[-1].split('.')[0]
+    num = name.split('_')[0][5:]
+    return int(num)
+
+
 class SceneflowDataset(Dataset):
-    def __init__(self, npoints=4096, root='./spine_clouds', train=True):
+    def __init__(self, npoints=4096, root='./spine_clouds', mode="train"):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
-        :param train: True if we use the training part of the data, False if we use validation/test
+        :param train: mode can be any of the "train", "test" and "validation"
         """
         self.npoints = npoints
-        self.train = train
+        self.mode = mode
         ##in case we want to test on different data
         # if self.train==False:
         #     self.root = "./spine_clouds"
         # else:
         self.root = root
 
-        self.datapath = glob.glob(os.path.join(self.root, '*.npz'))
-        #train
-        if self.train == True:
-            self.datapath = self.datapath[:-8]
-        #validation
+        self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
+        train_spines = np.arange(1, 7)
+        val_spines = [7]
+        test_spines = [8]
+        # train
+        if self.mode == "train":
+            self.data_path = [path for path in self.data_path if _get_spine_number(path) in train_spines]
+        # test
+        elif self.mode == "test":
+            self.data_path = [path for path in self.data_path if _get_spine_number(path) in test_spines]
+        # validation
+        elif self.mode == "validation":
+            self.data_path = [path for path in self.data_path if _get_spine_number(path) in val_spines]
         else:
-            self.datapath = self.datapath[-8:]
-
+            raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "validation"')
 
     def __getitem__(self, index):
-        fn = self.datapath[index]
+        fn = self.data_path[index]
         with open(fn, 'rb') as fp:
             constraint, flow, pos1, pos2 = read_numpy_file(fp)
 
             # augmentation
-            if self.train==True:
+            if self.mode == "train":
                 flow = augment_data(flow, pos1, pos2)
 
         np.random.seed(100)
 
         L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
             pos1)
-        #TODO: PROBLEM WITH POINT SELECTION WORK ON IT!!!!
+        # TODO: PROBLEM WITH POINT SELECTION WORK ON IT!!!!
 
         sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
                                       sample_idx3, sample_idx4,
@@ -220,17 +236,16 @@ class SceneflowDataset(Dataset):
         # make space for the constraint points
         sample_idx_source = np.delete(sample_idx_source, [10, 1200, 1201, 2000, 2001, 3000, 3001, 4000])
         # add the constraint points
-        constraint_points = np.array([L1[constraint[0],...],
-                                            L2[constraint[1],...],
-                                            L2[constraint[2],...],
-                                            L3[constraint[3],...],
-                                            L3[constraint[4],...],
-                                            L4[constraint[5],...],
-                                            L4[constraint[6],...],
-                                            L5[constraint[7],...]])
+        constraint_points = np.array([L1[constraint[0], ...],
+                                      L2[constraint[1], ...],
+                                      L2[constraint[2], ...],
+                                      L3[constraint[3], ...],
+                                      L3[constraint[4], ...],
+                                      L4[constraint[5], ...],
+                                      L4[constraint[6], ...],
+                                      L5[constraint[7], ...]])
 
-        sample_idx_source = np.concatenate((sample_idx_source, constraint_points),axis=0).astype(int)
-
+        sample_idx_source = np.concatenate((sample_idx_source, constraint_points), axis=0).astype(int)
 
         np.random.seed(20)
         L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
@@ -240,13 +255,13 @@ class SceneflowDataset(Dataset):
 
         sample_idx_target = sample_idx_[::5]
 
-        pos1_ = np.copy(pos1)[sample_idx_source, :3]*1e+3
+        pos1_ = np.copy(pos1)[sample_idx_source, :3] * 1e+3
 
-        pos2_ = np.copy(pos2)[sample_idx_target, :3]*1e+3
-        flow_ = np.copy(flow)[sample_idx_source, :]*1e+3
+        pos2_ = np.copy(pos2)[sample_idx_target, :3] * 1e+3
+        flow_ = np.copy(flow)[sample_idx_source, :] * 1e+3
 
-        color1 = np.copy(pos1)[sample_idx_source, 3:6]*1e+3
-        color2 = np.copy(pos2)[sample_idx_target, 3:6]*1e+3
+        color1 = np.copy(pos1)[sample_idx_source, 3:6] * 1e+3
+        color2 = np.copy(pos2)[sample_idx_target, 3:6] * 1e+3
 
         surface1 = np.copy(pos1)[sample_idx_source, 6]
         # specific for vertebrae:
@@ -280,7 +295,7 @@ class SceneflowDataset(Dataset):
         return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
 
     def __len__(self):
-        return len(self.datapath)
+        return len(self.data_path)
 
 
 if __name__ == '__main__':
