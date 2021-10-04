@@ -67,12 +67,12 @@ def train_one_epoch(net, train_loader, opt, loss_opt):
         num_examples += batch_size
         flow_pred = net(pc1, pc2, color1, color2)
         loss = F.mse_loss(flow_pred.float(), flow.float())
-        if loss_opt == "biomechanical":
+        if "biomechanical" in loss_opt:
             for idx in range(batch_size):
-                loss += utils.biomechanical_loss(constraint, flow, flow_pred, idx, pc1)
-        elif loss_opt == "rigidity":
+                loss += utils.biomechanical_loss(constraint, flow, flow_pred, idx, pc1)[0]
+        if "rigidity" in loss_opt:
             loss += utils.rigidity_loss(flow, flow_pred, pc1, position1)
-        elif loss_opt == "chamfer":
+        if "chamfer" in loss_opt:
             loss += utils.chamfer_loss(flow, flow_pred, pc1, pc2)
 
         loss.backward()

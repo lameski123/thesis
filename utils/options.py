@@ -25,7 +25,8 @@ def create_parser():
                         help='dataset to use')
     parser.add_argument('--dataset_path', type=str, default='./spine_clouds', metavar='N', help='dataset to use')
     parser.add_argument('--model_path', type=str, default='', metavar='N', help='Pretrained model path')
-    parser.add_argument('--loss', type=str, default='biomechanical', metavar='N',
-                        help='biomechanical(default), rigidity, chamfer or leave it empty("") only for flow loss')
+    parser.add_argument('--loss', nargs='+', default=[],
+                        help='list of possible losses, currently [biomechanical, rigidity, chamfer] '
+                             'or leave it empty only for flow loss')
     parser.add_argument('--wandb-key', type=str, required=True, help='key to login to your wandb account')
     return parser
