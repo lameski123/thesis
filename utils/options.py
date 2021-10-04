@@ -27,4 +27,5 @@ def create_parser():
     parser.add_argument('--model_path', type=str, default='', metavar='N', help='Pretrained model path')
     parser.add_argument('--loss', type=str, default='biomechanical', metavar='N',
                         help='biomechanical(default), rigidity, chamfer or leave it empty("") only for flow loss')
+    parser.add_argument('--wandb-key', type=str, required=True, help='key to login to your wandb account')
     return parser

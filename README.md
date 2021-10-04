@@ -33,4 +33,10 @@ Test is done using the test.py file. two arguments are mandatory, data path and 
 
 `python test.py --dataset_path %DATASET_PATH% ----model_path %MODEL_PATH%`
 
+# Running on the cluster
+
+we need the cuda exec. to compile the libraries. so we should pull a `devel` image not `runtime`
+
+the code is tested on `pytorch/pytorch:1.9.0-cuda11.1-cudnn8-devel`.
+
 
