@@ -2,10 +2,10 @@ import numpy as np
 import wandb
 
 
-def plot_pointcloud(flow_pred, pc1, pc2):
-    pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
-    pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
-    flow_pred = flow_pred.transpose(1, 2).detach().cpu().numpy()[2, :, :].squeeze()
+def plot_pointcloud(flow_pred, pc1, pc2, tag=''):
+    pc1 = pc1.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+    pc2 = pc2.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
+    flow_pred = flow_pred.transpose(1, 2).detach().cpu().numpy()[0, :, :].squeeze()
     to_plot = np.zeros((pc1.shape[0] * 3, 6))
     to_plot[:pc1.shape[0], :3] = pc1[:, :3]
     to_plot[:pc1.shape[0], 3] = 255  # red
@@ -13,6 +13,7 @@ def plot_pointcloud(flow_pred, pc1, pc2):
     to_plot[pc1.shape[0]:pc1.shape[0] * 2, 4] = 255  # green
     to_plot[pc1.shape[0] * 2:, :3] = pc2[:, :3]
     to_plot[pc1.shape[0] * 2:, 5] = 255  # blue
+    tag = 'training' if tag == '' else f"training_{tag}"
     wandb.log({
-        "training": wandb.Object3D({"type": "lidar/beta", "points": to_plot})
+        tag: wandb.Object3D({"type": "lidar/beta", "points": to_plot})
     })
