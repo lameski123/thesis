@@ -36,12 +36,12 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
         if save_results:
             result_path = os.path.join(args.checkpoints_dir, args.exp_name, 'test_result/')
             os.makedirs(result_path, exist_ok=True)
-            n = pc1.shape[0]
-            for j in range(n):
-                idx = i*n + j
-                np.savetxt(os.path.join(result_path, f"predicted_{idx}.txt"), (pc1[j, :, :] + flow_pred[j, :, :]).cpu())
-                np.savetxt(os.path.join(result_path, f"source_{idx}.txt"), pc1[j, :, :].detach().cpu())
-                np.savetxt(os.path.join(result_path, f"target_{idx}.txt"), pc2[j, :, :].detach().cpu())
+            for j in range(test_loader.batch_size):
+                np.savetxt(os.path.join(result_path, f"predicted_{fn}.txt"), (pc1[j, :, :] + flow_pred[j, :, :]).cpu())
+                np.savetxt(os.path.join(result_path, f"source_{fn}.txt"), pc1[j, :, :].detach().cpu())
+                np.savetxt(os.path.join(result_path, f"target_{fn}.txt"), pc2[j, :, :].detach().cpu())
+                utils.plot_pointcloud(flow_pred[j:j+1, ...], pc1[j:j+1, ...], pc2[j:j+1, ...], tag=fn[j], mode='test')
+
 
         if wandb_table is not None:
             for j in range(test_loader.batch_size):
