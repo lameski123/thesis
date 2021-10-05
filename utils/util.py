@@ -17,7 +17,7 @@ class IOStream:
 
 
 def read_batch_data(data):
-    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2 = data
+    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2, file_name = data
     pc1 = pc1.cuda().transpose(2, 1).contiguous().float()
     pc2 = pc2.cuda().transpose(2, 1).contiguous().float()
     color1 = color1.cuda().transpose(2, 1).contiguous().float()
@@ -25,7 +25,7 @@ def read_batch_data(data):
     flow = flow.cuda().transpose(2, 1).contiguous()
     mask1 = mask1.cuda().float()
     constraint = constraint.cuda()
-    return color1, color2, constraint, flow, pc1, pc2, position1
+    return color1, color2, constraint, flow, pc1, pc2, position1, file_name
 
 
 def weights_init(m):
@@ -41,12 +41,20 @@ def weights_init(m):
 
 
 def create_paths(args):
-    if not os.path.exists('checkpoints'):
-        os.makedirs('checkpoints')
-    if not os.path.exists('checkpoints/' + args.exp_name):
-        os.makedirs('checkpoints/' + args.exp_name)
-    if not os.path.exists('checkpoints/' + args.exp_name + '/' + 'models'):
-        os.makedirs('checkpoints/' + args.exp_name + '/' + 'models')
-    os.system('cp main.py checkpoints' + '/' + args.exp_name + '/' + 'main.py.backup')
-    os.system('cp model.py checkpoints' + '/' + args.exp_name + '/' + 'model.py.backup')
-    os.system('cp data.py checkpoints' + '/' + args.exp_name + '/' + 'data.py.backup')
+    os.makedirs(args.checkpoints_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.checkpoints_dir, args.exp_name), exist_ok=True)
+    os.makedirs(os.path.join(args.checkpoints_dir, args.exp_name, 'models'), exist_ok=True)
+
+
+def update_args_for_cluster(args):
+    try:
+        from polyaxon_client.tracking import Experiment
+        args.checkpoints_dir = Experiment().get_outputs_path()
+        print("You are running on the cluster :)")
+        print(args)
+    except Exception as e:
+        print(e)
+        args.checkpoints_dir = 'checkpoints/' + "flownet3d/"
+        print("You are Running on the local Machine")
+        print(args)
+    return args
