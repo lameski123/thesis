@@ -1,0 +1,14 @@
+program: train.py
+method: random
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  lr:
+    distribution: 'log_uniform'
+    min: -10
+    max: -4
+#  epochs:
+#    value: 2
+  loss:
+    values: ['', 'biomechanical', 'rigidity', 'chamfer']

@@ -33,7 +33,7 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
         chamfer_loss_total += chamfer_loss.item() / len(test_loader)
         total_loss += loss.item() / len(test_loader)
 
-        if save_results:
+        if save_results and args.wandb_sweep_id is None:
             result_path = os.path.join(args.checkpoints_dir, args.exp_name, 'test_result/')
             os.makedirs(result_path, exist_ok=True)
             for j in range(test_loader.batch_size):

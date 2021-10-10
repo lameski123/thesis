@@ -198,9 +198,9 @@ class SceneflowDataset(Dataset):
         self.root = root
 
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
-        train_spines = np.arange(1, 7)
-        val_spines = [7]
-        test_spines = [8]
+        train_spines = np.arange(1, 18)
+        val_spines = [18, 19, 20]
+        test_spines = [21, 22]
         # train
         if self.mode == "train":
             self.data_path = [path for path in self.data_path if _get_spine_number(path) in train_spines]
@@ -255,13 +255,13 @@ class SceneflowDataset(Dataset):
 
         sample_idx_target = sample_idx_[::5]
 
-        pos1_ = np.copy(pos1)[sample_idx_source, :3] * 1e+3
+        pos1_ = np.copy(pos1)[sample_idx_source, :3] #* 1e+3
 
-        pos2_ = np.copy(pos2)[sample_idx_target, :3] * 1e+3
-        flow_ = np.copy(flow)[sample_idx_source, :] * 1e+3
+        pos2_ = np.copy(pos2)[sample_idx_target, :3] #* 1e+3
+        flow_ = np.copy(flow)[sample_idx_source, :] #* 1e+3
 
-        color1 = np.copy(pos1)[sample_idx_source, 3:6] * 1e+3
-        color2 = np.copy(pos2)[sample_idx_target, 3:6] * 1e+3
+        color1 = np.copy(pos1)[sample_idx_source, 3:6] # * 1e+3
+        color2 = np.copy(pos2)[sample_idx_target, 3:6] #* 1e+3
 
         surface1 = np.copy(pos1)[sample_idx_source, 6]
         # specific for vertebrae:

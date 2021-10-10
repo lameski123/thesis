@@ -11,6 +11,8 @@ tags:
 
 build:
   image: "mfazampour/spine_flownet"
+  build_steps:
+    - "pip install matplotlib"
 
 
 environment:
@@ -29,9 +31,15 @@ environment:
 
 params:
   dataset_path: '/data/Spine_Flownet/spine_clouds/'
-  loss: rigidity
   wandb_key: d3424a60f5e39087781fde8ff973ee92dd6da70d
+  wandb_sweep_id: kgks9gd0
+  wandb_sweep_count: 20
+  epoch: 10
 
 run:
-    cmd: python train.py --dataset_path {{ dataset_path }} --loss {{ loss }} --wandb_key {{ wandb_key }}
+    cmd: python train.py --dataset_path {{ dataset_path }} \
+          --wandb_key {{ wandb_key }} \
+          --wandb_sweep_id {{ wandb_sweep_id }} \
+          --wandb_sweep_count {{ wandb_sweep_count }} \
+          --epoch {{ epoch }}
 
