@@ -13,7 +13,6 @@ def recursive_search(directory, pattern):
 
 def generate_entry_dict(input_matches):
 
-
     replace_value_list = ["21 22 23 24", "20 22 23 24", "20 21 23 24", "20 21 22 24", "20 21 22 23"]
 
     entry_dict = {'INPUTFILE': [], 'OLDVALUES': [], 'OUTPUTSTL': [], 'OUTPUTPC': [] }
