@@ -324,13 +324,14 @@ def preprocess_spine_data(spine_path):
 
 def get_ray_casted_data(data, raycasted_txt_path):
     # Loading the raycasted point clouds
-    source_ray_casted_pc = np.loadtxt(os.path.join(raycasted_txt_path, data["spine_id"], data["source_ts_id"] + ".txt"))
-    target_ray_casted_pc = np.loadtxt(os.path.join(raycasted_txt_path, data["spine_id"], data["target_ts_id"] + ".txt"))
+    source_ray_casted_pc = np.loadtxt(os.path.join(raycasted_txt_path, data["spine_id"],"raycasted_" + data["source_ts_id"] + ".txt"))
+    target_ray_casted_pc = np.loadtxt(os.path.join(raycasted_txt_path, data["spine_id"], "raycasted_" + data["target_ts_id"] + ".txt"))
 
-    # Getting the biomechanical constraints (that will be used later)
+    # Getting the flow at the biomechanical_constraints points as it will be needed later
+    constraint_indexes = points2indexes(point_list=data["biomechanical_constraint"],
+                                        point_cloud=data["source_pc"])
+
     constraint_points, constraint_flows = [], []
-    constraint_indexes = [ (c[0].get_closest_point_in_cloud(data["source_pc"])[0],
-                            c[1].get_closest_point_in_cloud(data["source_pc"])[0]) for c in data["biomechanical_constraint"]]
     for (p1_idx, p2_idx) in constraint_indexes:
         p1_colored, p2_colored = data["source_pc"][p1_idx, :], data["source_pc"][p2_idx, :]
         p1_flow, p2_flow = data["flow"][p1_idx, :], data["flow"][p2_idx, :]
@@ -349,12 +350,11 @@ def get_ray_casted_data(data, raycasted_txt_path):
                                                                    r_target=target_ray_casted_pc)
     data["target_pc"] = data["target_pc"][target_ray_casted_idxes]
 
-    # Adding the biomechanical constraints
+    # Adding the biomechanical constraints to the source as they might be not present due to the ray-casting
     new_constraints_idx = []
     for (p1, p2), (flow1, flow2) in zip(constraint_points, constraint_flows):
-        data["source_pc"] = np.concatenate((data["source_pc"], p1, p2), axis=1)
-        data["flow"] = np.concatenate((data["flow"], flow1, flow2), axis=1)
-        new_constraints_idx.append((data["source_pc"].shape[-2], data["source_pc"].shape[-1]))
+        data["source_pc"] = np.concatenate((data["source_pc"], np.reshape(p1, [1, 4]), np.reshape(p2, [1, 4])), axis=0)
+        data["flow"] = np.concatenate((data["flow"], np.reshape(flow1, [1, 3]), np.reshape(flow2, [1, 3])), axis=0)
 
     return data
 
@@ -471,5 +471,6 @@ def generate_npz_files(src_txt_pc_path, dst_npz_path, src_raycasted_pc_path="", 
 
 generate_npz_files(src_txt_pc_path="C:\\Users\\maria\\OneDrive\\Desktop\\TestDataOrderingJane\\txt_files",
                    dst_npz_path="C:\\Users\\maria\\OneDrive\\Desktop\\TestDataOrderingJane\\npz_data",
-                   ray_casted=False,
+                   ray_casted=True,
+                   src_raycasted_pc_path="C:\\Users\\maria\\OneDrive\\Desktop\\TestDataOrderingJane\\txt_files_raycasted",
                    dst_sanity_check_data="C:\\Users\\maria\\OneDrive\\Desktop\\TestDataOrderingJane\\sanity_check")
