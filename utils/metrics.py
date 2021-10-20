@@ -3,7 +3,14 @@ import pyquaternion
 from scipy.spatial.transform import Rotation as R
 
 
-# todo: find better solution for rigid transform only
+def rot_transl2homogeneous(rot, t):
+    homogeneous_transformation = np.eye(4)
+    homogeneous_transformation[0:3, 0:3] = rot
+    homogeneous_transformation[0:3, 3] = t
+
+    return homogeneous_transformation
+
+
 def umeyama_absolute_orientation(from_points, to_points, fix_scaling=True):
     assert len(from_points.shape) == 2, \
         "from_points must be a m x n array"
@@ -46,11 +53,11 @@ def umeyama_absolute_orientation(from_points, to_points, fix_scaling=True):
 
 def pose_distance(p1, p2):
 
-    translation_distance = np.linalg.norm(p1[0:3, -1], p2[0:3, -1])
-    q0 = R.from_matrix(p1).as_quat()
-    q1 = R.from_matrix(p2).as_quat()
+    translation_distance = np.linalg.norm(p1[0:3, -1] - p2[0:3, -1])
+    q0 = R.from_matrix(p1[0:3, 0:3]).as_quat()
+    q1 = R.from_matrix(p2[0:3, 0:3]).as_quat()
 
-    quaternion_distance = pyquaternion. Quaternion.absolute_distance(q0, q1)
+    quaternion_distance = pyquaternion.Quaternion.absolute_distance(pyquaternion.Quaternion(q0), pyquaternion.Quaternion(q1))
     return translation_distance, quaternion_distance
 
 
@@ -58,14 +65,15 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow):
 
     translation_distance_list = []
     quaternion_distance_list = []
-    for vertebrae_level in range(5):
-        vertebra_idxes = np.argwhere(source[:, 4] == vertebrae_level)
+    for vertebrae_level in range(1, 6):
+        vertebra_idxes = np.argwhere(source[:, 3] == vertebrae_level).flatten()
 
         source_v = source[vertebra_idxes, 0:3]
         gt_deformed_v = source[vertebra_idxes, 0:3] + gt_flow[vertebra_idxes]
         predicted_deformed_v = source[vertebra_idxes, 0:3] + predicted_flow[vertebra_idxes]
 
-        gt_T = predicted_T = np.eye(4)
+        gt_T = np.eye(4)
+        predicted_T = np.eye(4)
 
         gt_T[0:3, 0:3], gt_T[0:3, -1] = umeyama_absolute_orientation(source_v, gt_deformed_v)
         predicted_T[0:3, 0:3], predicted_T[0:3, -1] = umeyama_absolute_orientation(source_v, predicted_deformed_v)
