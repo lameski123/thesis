@@ -110,7 +110,7 @@ def vertebrae_surface(surface):
     return L1, L2, L3, L4, L5
 
 
-def augment_data(flow, pos1, pos2):
+def augment_data(flow, pos1, pos2, raycasted):
     to_augment = np.random.random()
     angle_both = np.random.randint(0, 360)
     angle_target = np.random.randint(-20, 20)
@@ -119,10 +119,16 @@ def augment_data(flow, pos1, pos2):
     R = r.as_matrix()
     r2 = Rotation.from_euler(xyz, angle_target * np.pi / 180)
     R2 = r2.as_matrix()
+    pos1_flow = np.zeros_like(pos1)
+    pos1_flow[:, :3] = pos1[:, :3] + flow
+    pos1_flow[:, 3:6] = pos1[:, 3:6] + flow
+    pos1_flow[:, 6] = pos1[:, 6]
     # rotation
     if to_augment > .5:
         pos1_centroid = centeroid_(pos1[:, :3])
         color1_centroid = centeroid_(pos1[:, 3:6])
+        pos1_flow_centroid = centeroid_(pos1_flow[:, :3])
+        color1_flow_centroid = centeroid_(pos1_flow[:, 3:6])
         pos2_centroid = centeroid_(pos2[:, :3])
         color2_centroid = centeroid_(pos2[:, 3:6])
 
@@ -130,7 +136,8 @@ def augment_data(flow, pos1, pos2):
         pos2[:, :3] -= pos2_centroid
         pos1[:, 3:6] -= color1_centroid
         pos2[:, 3:6] -= color2_centroid
-
+        pos1_flow[:, 3:6] -= color1_flow_centroid
+        pos1_flow[:, :3] -= pos1_flow_centroid
         # rotate both source and target:
         # pos1[:, :3] = np.dot(pos1[:, :3], R)
         # pos1[:, 3:6] = np.dot(pos1[:, 3:6], R)
@@ -141,30 +148,46 @@ def augment_data(flow, pos1, pos2):
         # only target slightly rotated
         pos2[:, :3] = np.dot(pos2[:, :3], R2)
         pos2[:, 3:6] = np.dot(pos2[:, 3:6], R2)
+        pos1_flow[:, :3] = np.dot(pos1_flow[:, :3], R2)
+        pos1_flow[:, 3:6] = np.dot(pos1_flow[:, 3:6], R2)
 
         pos1[:, :3] += pos1_centroid
         pos2[:, :3] += pos2_centroid
         pos1[:, 3:6] += color1_centroid
         pos2[:, 3:6] += color2_centroid
-
-        flow = pos2[:, :3] - pos1[:, :3]
+        pos1_flow[:, 3:6] += color1_flow_centroid
+        pos1_flow[:, :3] += pos1_flow_centroid
+        if raycasted == True:
+            flow = pos1_flow[:, :3] - pos1[:, :3]
+        else:
+            flow = pos2[:, :3] - pos1[:, :3]
     to_augment = np.random.random()
     # noise
-    sample_x = np.random.normal(0, 0.002, pos2.shape[0])
-    sample_y = np.random.normal(0, 0.002, pos2.shape[0])
-    sample_z = np.random.normal(0, 0.002, pos2.shape[0])
+    sample_x = np.random.normal(0, 2, pos1_flow.shape[0])
+    sample_y = np.random.normal(0, 2, pos1_flow.shape[0])
+    sample_z = np.random.normal(0, 2, pos1_flow.shape[0])
     indexes = np.random.random(pos2.shape[0] // 3).astype(int)
     # adding noice
     if to_augment > .5:
-        pos2[indexes, 0] += sample_x[indexes]
-        pos2[indexes, 1] += sample_y[indexes]
-        pos2[indexes, 2] += sample_z[indexes]
-        pos2[indexes, 3] += sample_x[indexes]
-        pos2[indexes, 4] += sample_y[indexes]
-        pos2[indexes, 5] += sample_z[indexes]
-
-        flow = pos2[:, :3] - pos1[:, :3]
-    return flow
+        if raycasted == True:
+            indexes = np.random.random(pos1_flow.shape[0] // 3).astype(int)
+            pos1_flow[indexes, 0] += sample_x[indexes]
+            pos1_flow[indexes, 1] += sample_y[indexes]
+            pos1_flow[indexes, 2] += sample_z[indexes]
+            pos1_flow[indexes, 3] += sample_x[indexes]
+            pos1_flow[indexes, 4] += sample_y[indexes]
+            pos1_flow[indexes, 5] += sample_z[indexes]
+            flow = pos1_flow[:, :3] - pos1[:, :3]
+        else:
+            indexes = np.random.random(pos2.shape[0] // 3).astype(int)
+            pos2[indexes, 0] += sample_x[indexes]
+            pos2[indexes, 1] += sample_y[indexes]
+            pos2[indexes, 2] += sample_z[indexes]
+            pos2[indexes, 3] += sample_x[indexes]
+            pos2[indexes, 4] += sample_y[indexes]
+            pos2[indexes, 5] += sample_z[indexes]
+            flow = pos2[:, :3] - pos1[:, :3]
+    return flow, pos1, pos2
 
 
 def read_numpy_file(fp):
@@ -178,16 +201,18 @@ def read_numpy_file(fp):
 
 def _get_spine_number(path: str):
     name: str = path.split('/')[-1].split('.')[0]
-    num = name.split('_')[0][5:]
+    num = name.split('_')[1][5:]
     return int(num)
 
 
 class SceneflowDataset(Dataset):
-    def __init__(self, npoints=4096, root='./spine_clouds', mode="train"):
+    def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
+                 raycasted = False):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
         :param train: mode can be any of the "train", "test" and "validation"
+        :param raycasted: the data used is raycasted or full vertebras
         """
         self.npoints = npoints
         self.mode = mode
@@ -196,11 +221,11 @@ class SceneflowDataset(Dataset):
         #     self.root = "./spine_clouds"
         # else:
         self.root = root
-
+        self.raycasted = raycasted
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
-        train_spines = np.arange(1, 7)
-        val_spines = [7]
-        test_spines = [8]
+        train_spines = np.arange(1, 20)
+        val_spines = [21]
+        test_spines = [22]
         # train
         if self.mode == "train":
             self.data_path = [path for path in self.data_path if _get_spine_number(path) in train_spines]
@@ -220,48 +245,69 @@ class SceneflowDataset(Dataset):
 
             # augmentation
             if self.mode == "train":
-                flow = augment_data(flow, pos1, pos2)
+                flow, pos1, pos2 = augment_data(flow, pos1, pos2, raycasted=self.raycasted)
 
         np.random.seed(100)
-
-        L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
+        if self.raycasted == False:
+            L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
             pos1)
-        # TODO: PROBLEM WITH POINT SELECTION WORK ON IT!!!!
+            sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
+                                          sample_idx3, sample_idx4,
+                                          sample_idx5), axis=0).astype(int)
+            # take every 5th point so that every vertebra has equal number of points
+            sample_idx_source = sample_idx_[::5]
+        else:
+            L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = \
+                self.sample_vertebrae_raycasted(pos1)
+            sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
+                                          sample_idx3, sample_idx4,
+                                          sample_idx5), axis=0).astype(int)
+            # take every 5th point so that every vertebra has equal number of points
+            sample_idx_source = sample_idx_
 
-        sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
-                                      sample_idx3, sample_idx4,
-                                      sample_idx5), axis=0).astype(int)
-        # take every 5th point so that every vertebra has equal number of points
-        sample_idx_source = sample_idx_[::5]
         # make space for the constraint points
-        sample_idx_source = np.delete(sample_idx_source, [10, 1200, 1201, 2000, 2001, 3000, 3001, 4000])
-        # add the constraint points
-        constraint_points = np.array([L1[constraint[0], ...],
-                                      L2[constraint[1], ...],
-                                      L2[constraint[2], ...],
-                                      L3[constraint[3], ...],
-                                      L3[constraint[4], ...],
-                                      L4[constraint[5], ...],
-                                      L4[constraint[6], ...],
-                                      L5[constraint[7], ...]])
+        points_to_delete = [10, 1200, 1201, 2000, 2001, 3000, 3001, 4000]
+        constraint_points = []
 
+        for i in range(len(constraint) // 8):
+            points_to_delete.extend(np.array(points_to_delete) + 2 * i)
+            constraint_points.extend([L1[constraint[0 + i], ...],
+                                      L2[constraint[1 + i], ...],
+                                      L2[constraint[2 + i], ...],
+                                      L3[constraint[3 + i], ...],
+                                      L3[constraint[4 + i], ...],
+                                      L4[constraint[5 + i], ...],
+                                      L4[constraint[6 + i], ...],
+                                      L5[constraint[7 + i], ...]])
+        sample_idx_source = np.delete(sample_idx_source, points_to_delete)
+        # add the constraint points
         sample_idx_source = np.concatenate((sample_idx_source, constraint_points), axis=0).astype(int)
 
         np.random.seed(20)
-        L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
-            pos2)
+        if self.raycasted == False:
+            L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = self.sample_vertebrae(
+                pos2)
+            sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
+                                          sample_idx3, sample_idx4,
+                                          sample_idx5), axis=0).astype(int)
+            # take every 5th point so that every vertebra has equal number of points
+            sample_idx_target = sample_idx_[::5]
+        else:
+            L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5 = \
+                self.sample_vertebrae_raycasted(pos2)
+            sample_idx_ = np.concatenate((sample_idx1, sample_idx2,
+                                          sample_idx3, sample_idx4,
+                                          sample_idx5), axis=0).astype(int)
+            # take every 5th point so that every vertebra has equal number of points
+            sample_idx_target = sample_idx_
 
-        sample_idx_ = np.concatenate((sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5), axis=0)
+        pos1_ = np.copy(pos1)[sample_idx_source, :3]
 
-        sample_idx_target = sample_idx_[::5]
+        pos2_ = np.copy(pos2)[sample_idx_target, :3]
+        flow_ = np.copy(flow)[sample_idx_source, :]
 
-        pos1_ = np.copy(pos1)[sample_idx_source, :3] * 1e+3
-
-        pos2_ = np.copy(pos2)[sample_idx_target, :3] * 1e+3
-        flow_ = np.copy(flow)[sample_idx_source, :] * 1e+3
-
-        color1 = np.copy(pos1)[sample_idx_source, 3:6] * 1e+3
-        color2 = np.copy(pos2)[sample_idx_target, 3:6] * 1e+3
+        color1 = np.copy(pos1)[sample_idx_source, 3:6]
+        color2 = np.copy(pos2)[sample_idx_target, 3:6]
 
         surface1 = np.copy(pos1)[sample_idx_source, 6]
         # specific for vertebrae:
@@ -275,7 +321,7 @@ class SceneflowDataset(Dataset):
         ########################################################################
         mask = np.ones([self.npoints])
 
-        return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095 - 8, -1)]), \
+        return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095 - len(constraint), -1)]), \
                vertebrae_point_inx_src, vertebrae_point_inx_tar, fn.split('/')[-1].split('.')[0]
 
     def sample_vertebrae(self, pos1):
@@ -292,6 +338,22 @@ class SceneflowDataset(Dataset):
         sample_idx4 = np.random.choice(L4, self.npoints, replace=False)
         L5 = np.argwhere(surface1 == 5).squeeze()
         sample_idx5 = np.random.choice(L5, self.npoints, replace=False)
+        return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
+
+    def sample_vertebrae_raycasted(self, pos1):
+        surface1 = np.copy(pos1)[:, 6]
+        # specific for vertebrae: sampling 4096 points
+        # and adding the 8 points for biomechanical constraint
+        L1 = np.argwhere(surface1 == 1).squeeze()
+        sample_idx1 = np.random.choice(L1, self.npoints // 5, replace=False)
+        L2 = np.argwhere(surface1 == 2).squeeze()
+        sample_idx2 = np.random.choice(L2, self.npoints // 5, replace=False)
+        L3 = np.argwhere(surface1 == 3).squeeze()
+        sample_idx3 = np.random.choice(L3, self.npoints // 5 + 1, replace=False)
+        L4 = np.argwhere(surface1 == 4).squeeze()
+        sample_idx4 = np.random.choice(L4, self.npoints // 5, replace=False)
+        L5 = np.argwhere(surface1 == 5).squeeze()
+        sample_idx5 = np.random.choice(L5, self.npoints // 5, replace=False)
         return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
 
     def __len__(self):
