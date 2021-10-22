@@ -23,6 +23,8 @@ class BiomechanicalCpd(RigidRegistration):
         self.max_iterations = max_iterations
         self.biomechanical_constraint = len(springs) > 0
 
+        self.constrained = len(springs) > 0
+
         if self.biomechanical_constraint:
             P_from_springs = np.zeros(shape=(len(self.springs_idxs), self.P.shape[1]))
             for i, spring in enumerate(springs):
@@ -60,3 +62,21 @@ class BiomechanicalCpd(RigidRegistration):
         # Update scale and translation using Fig. 2 of https://arxiv.org/pdf/0905.2635.pdf.
         # self.s = np.trace(np.dot(np.transpose(self.A), np.transpose(self.R))) / self.YPY
         self.t = np.transpose(muX) - self.s * np.dot(np.transpose(self.R), np.transpose(muY))
+
+    def update_variance(self):
+        """
+        Update the variance of the mixture model using the new estimate of the rigid transformation.
+        See the update rule for sigma2 in Fig. 2 of of https://arxiv.org/pdf/0905.2635.pdf.
+        """
+        qprev = self.q
+
+        trAR = np.trace(np.dot(self.A, self.R))
+        xPx = np.dot(np.transpose(self.Pt1), np.sum(
+            np.multiply(self.X_hat, self.X_hat), axis=1))
+        self.q = (xPx - 2 * self.s * trAR + self.s * self.s * self.YPY) / \
+                 (2 * self.sigma2) + self.D * self.Np / 2 * np.log(self.sigma2)
+
+        self.diff = np.abs(self.q - qprev)
+        self.sigma2 = (xPx - self.s * trAR) / (self.Np * self.D)
+        if self.sigma2 <= 0:
+            self.sigma2 = self.tolerance / 10

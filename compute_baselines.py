@@ -1,3 +1,5 @@
+import time
+
 from data import SceneflowDataset
 import argparse
 from constrained_cpd.BiomechanicalCPD import BiomechanicalCpd
@@ -5,9 +7,30 @@ import numpy as np
 from functools import partial
 import matplotlib.pyplot as plt
 from test_utils.metrics import umeyama_absolute_orientation, pose_distance
+import os
+from sklearn.neighbors import KDTree
 
 
-def visualize(iteration, error, X, Y, ax):
+def get_closest_points(pc1, pc2):
+    """
+    returns the points of pc1 which are closest to pc2
+    """
+    kdtree=KDTree(pc1[:,:3])
+    dist, ind =kdtree.query(pc2[:,:3], 1)
+    ind = ind.flatten()
+    points = pc1[ind, ...]
+
+    return points
+
+
+def visualize(iteration, error, X, Y, ax, file_id, vertebra, save_path):
+
+    if not os.path.exists(os.path.join(save_path, str(file_id))):
+        os.makedirs(os.path.join(save_path, str(file_id)))
+
+    np.savetxt(os.path.join(save_path, str(file_id), "source_vert" + str(vertebra)) + ".txt", X)
+    np.savetxt(os.path.join(save_path, str(file_id), "predicted_vert" + str(vertebra))+ ".txt", Y)
+
     plt.cla()
     ax.scatter(X[:, 0],  X[:, 1], X[:, 2], color='red', alpha=0.1)
     ax.scatter(Y[:, 0],  Y[:, 1], Y[:, 2], color='blue', alpha=0.1)
@@ -78,7 +101,7 @@ def read_batch_data(data):
     return color1, color2, constraint, flow, pc1, pc2, position1, file_name
 
 
-def run_cpd(data_batch):
+def run_cpd(data_batch, save_path):
     # source_pc, target_pc, _, _, gt_flow, _, constraint, position1, _ = data_batch
 
     source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name = data_batch
@@ -90,7 +113,7 @@ def run_cpd(data_batch):
 
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
-    callback = partial(visualize, ax=ax)
+    callback = partial(visualize, ax=ax, file_id=file_name, vertebra=0, save_path=save_path)
     ax.set_xlim([-40, 40])
     ax.set_ylim([-40, 40])
     ax.set_zlim([0, 200])
@@ -131,8 +154,8 @@ def run_cpd(data_batch):
 
     # 2.4 Iterate over all vertebrae and apply the constrained CPD
     for i, source_vertebra in enumerate(source_vertebrae_list):
-
-        reg = BiomechanicalCpd(target_pc=target_pc,
+        target_vertebra = get_closest_points(target_pc, source_vertebra)
+        reg = BiomechanicalCpd(target_pc=target_vertebra,
                                source_pc=source_vertebra,
                                springs=vertebrae_springs[i])
 
@@ -141,7 +164,8 @@ def run_cpd(data_batch):
         ax.set_xlim([-40, 40])
         ax.set_ylim([-40, 40])
         ax.set_zlim([0, 200])
-        callback = partial(visualize, ax=ax)
+
+        callback = partial(visualize, ax=ax, file_id=file_name, vertebra=i, save_path=save_path)
 
         TY, (_, R_reg, t_reg) = reg.register(callback)
         plt.close(fig)
@@ -158,20 +182,22 @@ def run_cpd(data_batch):
 
         print(pose_distance(predicted_T, gt_T))
 
+
     # todo: save metrics
 
-def main(dataset_path):
-    test_set = SceneflowDataset(npoints=1024, mode="test", root=dataset_path)
+def main(dataset_path, save_path):
+    test_set = SceneflowDataset(mode="test", root=dataset_path, raycasted=True)
 
     for data in test_set:
 
-        run_cpd(data)
+        run_cpd(data, save_path)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
     parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
+    parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")
 
     args = parser.parse_args()
 
-    main(args.dataset_path)
+    main(args.dataset_path, args.save_path)
