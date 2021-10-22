@@ -3,4 +3,3 @@ from .loss import rigidity_loss, biomechanical_loss, chamfer_loss, scene_flow_EP
 from .modules import FlowEmbedding, PointNetFeaturePropogation, PointNetSetAbstraction, PointNetSetUpConv
 from .figures import plot_pointcloud
 from .util import read_batch_data, IOStream, weights_init, create_paths, update_args_for_cluster
-from .metrics import umeyama_absolute_orientation, vertebrae_pose_error

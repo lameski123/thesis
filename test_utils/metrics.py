@@ -1,6 +1,7 @@
 import numpy as np
 import pyquaternion
 from scipy.spatial.transform import Rotation as R
+from test_utils import rigid_transform_3D
 
 
 def rot_transl2homogeneous(rot, t):
@@ -61,6 +62,19 @@ def pose_distance(p1, p2):
     return translation_distance, quaternion_distance
 
 
+def compute_rigid_transform(source_pc, target_pc):
+
+    if source_pc.shape[0] != 3:
+        source_pc = np.transpose(source_pc)
+        target_pc = np.transpose(target_pc)
+
+    T = np.eye(4)
+    R, t = rigid_transform_3D(source_pc, target_pc)
+    T[0:3, 0:3], T[0:3, -1] = R, np.squeeze(t)
+
+    return T
+
+
 def vertebrae_pose_error(source, gt_flow, predicted_flow):
 
     translation_distance_list = []
@@ -72,14 +86,14 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow):
         gt_deformed_v = source[vertebra_idxes, 0:3] + gt_flow[vertebra_idxes]
         predicted_deformed_v = source[vertebra_idxes, 0:3] + predicted_flow[vertebra_idxes]
 
-        gt_T = np.eye(4)
-        predicted_T = np.eye(4)
-
-        gt_T[0:3, 0:3], gt_T[0:3, -1] = umeyama_absolute_orientation(source_v, gt_deformed_v)
-        predicted_T[0:3, 0:3], predicted_T[0:3, -1] = umeyama_absolute_orientation(source_v, predicted_deformed_v)
+        gt_T = compute_rigid_transform(source_v, gt_deformed_v)
+        predicted_T = compute_rigid_transform(source_v, predicted_deformed_v)
 
         translation_distance, quaternion_distance = pose_distance(gt_T, predicted_T)
-        translation_distance_list.append(translation_distance)
+
+        # todo: change this as now there is a bug with double
+        translation_distance_list.append(translation_distance/1000)
+        # multiplication of the point clouds - the division by 100 should be removed
         quaternion_distance_list.append(quaternion_distance)
 
     return quaternion_distance_list, translation_distance_list

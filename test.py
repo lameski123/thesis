@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 import utils
+from test_utils import *
 from data import SceneflowDataset
 from model import FlowNet3D, FlowNet3DLegacy
 
@@ -43,7 +44,7 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
 
         # error in terms of quaternion distance and translation distance. Point clouds are transposed as the function
         # expects [n_points x 3] arrays and not [3 x n_points] arrays.
-        quaternion_distance_list, translation_distance_list = utils.vertebrae_pose_error(
+        quaternion_distance_list, translation_distance_list = vertebrae_pose_error(
             source=np.transpose(source_pc[i, ...]),
             gt_flow=np.transpose(gt_flow[i, ...]),
             predicted_flow=np.transpose(estimated_flow[i, ...]))
@@ -82,20 +83,22 @@ def log_metrics_dict2wandb(metric_dict_list, wandb_table):
         wandb_table.add_data(*table_entry)
 
 
-def save_data(save_path, file_id, source_pc, source_color, target_pc, predicted_pc):
+def save_data(save_path, file_id, source_pc, source_color, target_pc, predicted_pc, gt_pc):
 
     os.makedirs(save_path, exist_ok=True)
-    source_pc, target_pc, predicted_pc = tensor2numpy(source_pc, target_pc, predicted_pc)
+    source_pc, target_pc, predicted_pc, gt_pc = tensor2numpy(source_pc, target_pc, predicted_pc, gt_pc)
     batch_size = source_pc.shape[0]
 
     # concatenating the source color to the point clouds. As the target_pc and the predicted_pc are computed as
     # source + flow, the point clouds are assumed to be corresponding
     source_pc = np.concatenate((source_pc, np.expand_dims(source_color, 1)), axis=1)
-    target_pc = np.concatenate((target_pc, np.expand_dims(source_color, 1)), axis=1)
+    target_pc = np.concatenate((target_pc, np.zeros((batch_size, 1, source_color.size))), axis=1)
     predicted_pc = np.concatenate((predicted_pc, np.expand_dims(source_color, 1)), axis=1)
+    gt_pc = np.concatenate((gt_pc, np.expand_dims(source_color, 1)), axis=1)
 
     for i in range(batch_size):
         np.savetxt(os.path.join(save_path, f"source_{file_id[i]}.txt"), np.transpose(source_pc[i, ...]))
+        np.savetxt(os.path.join(save_path, f"gt_{file_id[i]}.txt"), np.transpose(gt_pc[i, ...]))
         np.savetxt(os.path.join(save_path, f"target_{file_id[i]}.txt"), np.transpose(target_pc[i, ...]))
         np.savetxt(os.path.join(save_path, f"predicted_{file_id[i]}.txt"), np.transpose(predicted_pc[i, ...]))
 
@@ -165,7 +168,8 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
                       source_pc=pc1,
                       source_color=source_color,
                       target_pc=pc2,
-                      predicted_pc=pc1 + flow_pred)
+                      predicted_pc=pc1 + flow_pred,
+                      gt_pc=pc1 + flow)
 
             # plotting on wandb
             for j in range(test_loader.batch_size):
@@ -219,7 +223,7 @@ def main():
 
 def test(args, net, textio):
 
-    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path)
+    test_set = SceneflowDataset(npoints=2046, mode="test", root=args.dataset_path)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")

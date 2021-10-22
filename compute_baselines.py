@@ -4,7 +4,7 @@ from constrained_cpd.BiomechanicalCPD import BiomechanicalCpd
 import numpy as np
 from functools import partial
 import matplotlib.pyplot as plt
-from utils.metrics import umeyama_absolute_orientation, pose_distance
+from test_utils.metrics import umeyama_absolute_orientation, pose_distance
 
 
 def visualize(iteration, error, X, Y, ax):
@@ -66,8 +66,25 @@ def get_springs_from_vertebra(vertebral_level_idxes, constraints_pairs):
     return current_vertebra_springs
 
 
+def read_batch_data(data):
+    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2, file_name = data
+    pc1 = pc1.transpose(2, 1).contiguous().float()
+    pc2 = pc2.transpose(2, 1).contiguous().float()
+    color1 = color1.transpose(2, 1).contiguous().float()
+    color2 = color2.transpose(2, 1).contiguous().float()
+    flow = flow.transpose(2, 1).contiguous()
+    mask1 = mask1.cuda().float()
+    constraint = constraint.cuda()
+    return color1, color2, constraint, flow, pc1, pc2, position1, file_name
+
+
 def run_cpd(data_batch):
-    source_pc, target_pc, _, _, gt_flow, _, constraint, position1, _ = data_batch
+    # source_pc, target_pc, _, _, gt_flow, _, constraint, position1, _ = data_batch
+
+    source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name = data_batch
+
+    # pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095 - 8, -1)]), \
+    # vertebrae_point_inx_src, vertebrae_point_inx_tar, fn.split('/')[-1].split('.')[0]
 
     constrain_pairs = get_connected_idxes(constraint)
 
@@ -143,17 +160,17 @@ def run_cpd(data_batch):
 
     # todo: save metrics
 
-
 def main(dataset_path):
-    test_set = SceneflowDataset(npoints=4096, mode="train", root=dataset_path)
+    test_set = SceneflowDataset(npoints=1024, mode="test", root=dataset_path)
 
     for data in test_set:
+
         run_cpd(data)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
-    parser.add_argument('--dataset_path', type=str, default="./spine_clouds")
+    parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
 
     args = parser.parse_args()
 
