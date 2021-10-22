@@ -124,7 +124,7 @@
             <param name="attenuationCoefficient">0.8</param>
             <param name="gain">0</param>
             <param name="probeWidth">30</param>
-            <param name="depth">70</param>
+            <param name="depth">90</param>
             <param name="elementsHeight">4</param>
             <param name="soundSpeed">1540</param>
             <param name="signalFreq">2</param>
@@ -145,7 +145,7 @@
             <param name="focusDepth">30</param>
             <param name="reflectFactor">2</param>
             <param name="hilbertLength">8</param>
-            <param name="frameCount">30</param>
+            <param name="frameCount">100</param>
             <param name="elevationRayCount">10</param>
             <param name="linesCount">128</param>
             <param name="axialSamplePoints">512</param>
