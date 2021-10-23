@@ -1,42 +1,6 @@
 <!--ImFusion Suite, 01.10.2021-->
 <propertyfile version="1.1">
     <param name="workspaceVersion">15</param>
-    <property name="Datasets">
-        <property name="Data">
-            <param name="uid">data0</param>
-            <param name="name">spine1_vert10</param>
-            <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
-        </property>
-        <property name="Data">
-            <param name="uid">data1</param>
-            <param name="name">spine1_vert20</param>
-            <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
-        </property>
-        <property name="Data">
-            <param name="uid">data2</param>
-            <param name="name">spine1_vert30</param>
-            <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
-        </property>
-        <property name="Data">
-            <param name="uid">data3</param>
-            <param name="name">spine1_vert40</param>
-            <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
-        </property>
-        <property name="Data">
-            <param name="uid">data4</param>
-            <param name="name">spine1_vert50</param>
-            <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
-        </property>
-        <property name="Data">
-            <param name="uid">data5</param>
-            <param name="name">Combined mesh</param>
-            <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
-        </property>
-    </property>
-    <property name="Interface">
-        <param name="outputUids">"data0" "data1" "data2" "data3" "data4" "data5" "data6" </param>
-        <param name="inputUids"></param>
-    </property>
     <property name="Algorithms">
         <property name="Mesh File">
             <param name="location">%(INPUT1)</param>
@@ -118,7 +82,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">%(INPUT1)</param>
+            <param name="name">spine1_vert10</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -155,7 +119,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">%(INPUT2)</param>
+            <param name="name">spine1_vert20</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -192,7 +156,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">%(INPUT3)</param>
+            <param name="name">spine1_vert30</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -229,7 +193,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">%(INPUT4)</param>
+            <param name="name">spine1_vert40</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -266,7 +230,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">%(INPUT5)</param>
+            <param name="name">spine1_vert50</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>

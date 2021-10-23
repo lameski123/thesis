@@ -2,4 +2,12 @@
 spine_clouds/
 venv/
 __pycache__/
+tmpDb/
 .polyaxon
+butta.py
+buttavero.py
+output/
+temp_sanity_check/
+wandb/
+check_points/model_spine_rigid.best.t7
+raycastedSpineClouds/
