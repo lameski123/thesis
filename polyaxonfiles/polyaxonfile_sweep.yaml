@@ -32,9 +32,9 @@ environment:
 params:
   dataset_path: '/data/Spine_Flownet/spine_clouds/'
   wandb_key: d3424a60f5e39087781fde8ff973ee92dd6da70d
-  wandb_sweep_id: kgks9gd0
-  wandb_sweep_count: 20
-  epoch: 10
+  wandb_sweep_id: mop6c5s3
+  wandb_sweep_count: 5
+  epoch: 30
 
 run:
     cmd: python train.py --dataset_path {{ dataset_path }} \

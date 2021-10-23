@@ -5,10 +5,14 @@ metric:
   name: val_loss
 parameters:
   lr:
-    distribution: 'log_uniform'
-    min: -10
-    max: -4
-#  epochs:
-#    value: 2
+    value: 0.001
+#    distribution: 'log_uniform'
+#    min: -10
+#    max: -4
   loss:
-    values: ['', 'biomechanical', 'rigidity', 'chamfer']
+    value: 'biomechanical'
+#    values: ['biomechanical', 'rigidity', 'chamfer']
+  loss_coeff:
+    distribution: 'log_uniform'
+    min: 3
+    max: 6
