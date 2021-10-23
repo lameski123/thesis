@@ -28,6 +28,8 @@ def create_parser():
     parser.add_argument('--loss', nargs='+', default=[],
                         help='list of possible losses, currently [biomechanical, rigidity, chamfer] '
                              'or leave it empty only for flow loss')
+    parser.add_argument('--loss_coeff', nargs='+', default=[],
+                        help='list of coefficients for each loss, in the same order as the loss')
     parser.add_argument('--wandb_key', type=str, required=True, help='key to login to your wandb account')
     parser.add_argument('--wandb_sweep_id', type=str, default=None, help='sweep id for wandb')
     parser.add_argument('--wandb_sweep_count', type=int, default=10, help='number of times sweeping the HP range')

@@ -4,19 +4,23 @@ import torch
 import torch.nn.functional as F
 
 
-def calculate_loss(batch_size, constraint, flow, flow_pred, loss_opt, pc1, pc2, position1):
+def calculate_loss(batch_size, constraint, flow, flow_pred, loss_opt, pc1, pc2, position1, loss_coeff):
+    if 'all' in loss_opt:
+        for loss in ["biomechanical", "rigidity", "chamfer"]:
+            if loss not in loss_coeff.keys():
+                loss_coeff[loss] = 1.0
     mse_loss = F.mse_loss(flow_pred.float(), flow.float())
     loss = torch.clone(mse_loss)
     bio_loss, rig_loss, cham_loss = torch.zeros_like(loss), torch.zeros_like(loss), torch.zeros_like(loss)
     if "biomechanical" in loss_opt or 'all' in loss_opt:
         for idx in range(batch_size):
-            bio_loss += biomechanical_loss(constraint, flow, flow_pred, idx, pc1)[0]
+            bio_loss += biomechanical_loss(constraint, flow, flow_pred, idx, pc1, coeff=loss_coeff["biomechanical"])
         loss += bio_loss
     if "rigidity" in loss_opt or 'all' in loss_opt:
-        rig_loss = rigidity_loss(flow, flow_pred, pc1, position1)
+        rig_loss = rigidity_loss(flow, flow_pred, pc1, position1, coeff=loss_coeff["rigidity"])
         loss += rig_loss
     if "chamfer" in loss_opt or 'all' in loss_opt:
-        cham_loss = chamfer_loss(flow, flow_pred, pc1, pc2)
+        cham_loss = chamfer_loss(flow, flow_pred, pc1, pc2, coeff=loss_coeff["chamfer"])
         loss += cham_loss
     return bio_loss, cham_loss, loss, mse_loss, rig_loss
 
@@ -24,14 +28,14 @@ def calculate_loss(batch_size, constraint, flow, flow_pred, loss_opt, pc1, pc2, 
 chamfer = chamferdist.ChamferDistance()
 
 
-def chamfer_loss(flow, flow_pred, pc1, pc2):
+def chamfer_loss(flow, flow_pred, pc1, pc2, coeff=1):
     predicted = pc1 + flow_pred
 
     loss = chamfer(predicted.type(torch.float), pc2.type(torch.float), bidirectional=True) * 1e-7
-    return loss
+    return loss * coeff
 
 
-def rigidity_loss(flow, flow_pred, pc1, position1):
+def rigidity_loss(flow, flow_pred, pc1, position1, coeff=1):
     source_dist1 = torch.Tensor().cuda()
     source_dist2 = torch.Tensor().cuda()
     predict_dist1 = torch.Tensor().cuda()
@@ -54,18 +58,18 @@ def rigidity_loss(flow, flow_pred, pc1, position1):
                 (predict_dist2, torch.index_select(pc1[idx, ...] + flow_pred[idx, ...], 1, p1[idx, :])[None, ...]
                  .expand(p1.size()[1], -1, -1).reshape(3, -1).T), dim=0)
     loss = torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
-                     torch.sqrt(F.mse_loss(predict_dist1, predict_dist2))) / 5
-    return loss
+                     torch.sqrt(F.mse_loss(predict_dist1, predict_dist2)))
+    return loss * coeff
 
 
-def biomechanical_loss(constraint, flow, flow_pred, idx, pc1):
+def biomechanical_loss(constraint, flow, flow_pred, idx, pc1, coeff=1):
     source = pc1[idx, :, constraint[idx]]
     predicted = pc1[idx, :, constraint[idx]] + flow_pred[idx, :, constraint[idx]]
     loss = torch.tensor([0.0], device=flow.device, dtype=flow.dtype)
     for j in range(0, constraint.size(1) - 1, 2):
-        loss += 1e-2 * torch.abs(torch.linalg.norm(source[:, j] - source[:, j + 1]) -
-                                 torch.linalg.norm(predicted[:, j] - predicted[:, j + 1]))
-    return loss
+        loss += torch.abs(torch.linalg.norm(source[:, j] - source[:, j + 1]) -
+                          torch.linalg.norm(predicted[:, j] - predicted[:, j + 1]))
+    return loss[0] * coeff
 
 
 def scene_flow_EPE_np(pred, labels, mask):

@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import torch
@@ -38,7 +39,7 @@ def train(args, net, train_loader, val_loader, textio):
         train_losses = train_one_epoch(net, train_loader, opt, args.loss, args)
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
-        test_losses = test_one_epoch(net, val_loader, wandb_table=None)
+        test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
         test_loss = test_losses['total_loss']
         textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
@@ -65,7 +66,8 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
         opt.zero_grad()
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                loss_opt, pc1, pc2, position1)
+                                                                                loss_opt, pc1, pc2, position1,
+                                                                                args.loss_coeff)
         mse_loss_total += mse_loss.item() / len(train_loader)
         bio_loss_total += bio_loss.item() / len(train_loader)
         rig_loss_total += rig_loss.item() / len(train_loader)
@@ -85,11 +87,12 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
 def train_wandb():
     global args
     with wandb.init(project='spine_flownet', config=args):
-
         config = wandb.config
-        print(config)
-        args.epochs = config.epochs
-        args.lr = config.lr
+        args = SimpleNamespace(**config)
+        args = utils.update_args(args)
+        print('-------------------config---------------------')
+        print(args)
+
         torch.backends.cudnn.deterministic = True
         torch.manual_seed(100)
         torch.cuda.manual_seed_all(100)
@@ -124,11 +127,11 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
-    args = utils.update_args_for_cluster(args)
 
     if args.wandb_sweep_id is not None:
          wandb.agent(args.wandb_sweep_id, train_wandb, count=args.wandb_sweep_count, project='spine_flownet')
 
+    args = utils.update_args(args)
 
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(100)

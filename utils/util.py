@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 from torch import nn
 
 
@@ -46,7 +47,25 @@ def create_paths(args):
     os.makedirs(os.path.join(args.checkpoints_dir, args.exp_name, 'models'), exist_ok=True)
 
 
-def update_args_for_cluster(args):
+def update_args(args):
+    coeffs = []
+    if isinstance(args.loss_coeff, float):
+        args.loss_coeff = [args.loss_coeff]
+    if isinstance(args.loss, str):
+        args.loss = [args.loss]
+    if len(args.loss_coeff) != 0:
+        for coeff in args.loss_coeff:
+            try:
+                coeffs.append(float(coeff))
+            except:
+                raise Exception('loss coefficient is should be a float number')
+        assert len(coeffs) == len(args.loss), 'number of coefficients should be the same as the losses'
+    else:
+        coeffs = np.ones((len(args.loss), 1))
+    args.loss_coeff = {}
+    for loss, coeff in zip(args.loss, coeffs):
+        args.loss_coeff[loss] = coeff
+
     try:
         from polyaxon_client.tracking import Experiment
         args.checkpoints_dir = Experiment().get_outputs_path()
