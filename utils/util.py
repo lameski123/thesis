@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import numpy as np
 from torch import nn
@@ -73,7 +74,8 @@ def update_args(args):
         print(args)
     except Exception as e:
         print(e)
-        args.checkpoints_dir = 'checkpoints/' + "flownet3d/"
+        now = datetime.now()
+        args.checkpoints_dir = os.path.join('checkpoints/', 'flownet3d/', f'{now.strftime("%m.%d.%Y_%H.%M.%S")}/')
         print("You are Running on the local Machine")
         print(args)
     return args

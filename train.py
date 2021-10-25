@@ -46,9 +46,9 @@ def train(args, net, train_loader, val_loader, textio):
             best_test_loss = test_loss
             textio.cprint('best test loss till now: %f' % test_loss)
             if torch.cuda.device_count() > 1:
-                torch.save(net.module.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
+                torch.save(net.module.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
             else:
-                torch.save(net.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
+                torch.save(net.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
 
         scheduler.step()
         wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses['total_loss']})
