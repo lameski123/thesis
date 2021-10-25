@@ -20,12 +20,23 @@ def make_homogeneous(pc):
     return np.concatenate((pc, np.ones((1, pc.shape[1]))), axis=0)
 
 
-def indexes2pyhsicalspace(indexes_list, spacing, physical_size, T_data2world):
-    indexes_array = np.array(indexes_list)
+def voxels2pyhsicalspace(voxel_coordinates, spacing, physical_size, T_data2world):
+    """
+    :param: indexes_list: [Nx3] list of points in voxel coordinates
+    :param: spacing: The voxel spacing
+    :param physical_size: The volume physical size
+    :param T_data2world: The volume transform in the world coordinate system
+
+    :return: [Nx3] array containing the voxels coordinates in physical space
+    """
+
+    assert isinstance(voxel_coordinates, np.ndarray), "voxel_coordinates must be a Nx3 array"
+    assert voxel_coordinates.shape[1] == 3
+
     spacing = np.array(spacing)
 
     # Points expressed in physical coordinates wrt to top left corner of the volume
-    points_apex = np.multiply(indexes_array, np.expand_dims(spacing, axis=0))
+    points_apex = np.multiply(voxel_coordinates, np.expand_dims(spacing, axis=0))
 
     # # Adding half voxel, assuming that we consider voxel centers - This is only needed for very large voxels,
     # # otherwise is negligible
@@ -37,7 +48,36 @@ def indexes2pyhsicalspace(indexes_list, spacing, physical_size, T_data2world):
     points_vol_center = make_homogeneous(points_vol_center)
     physical_points = np.matmul(T_data2world, points_vol_center)
 
-    return physical_points
+    return np.transpose(physical_points[0:3, ...])
+
+
+def get_bounding_box(physical_points):
+    """
+
+    :param physical_points: [Nx3] array containing point coordinates
+    :return: The bounding box containing the input physical_points
+    """
+
+    return [(np.min(physical_points[:, 0]), np.max(physical_points[:, 0])),
+            (np.min(physical_points[:, 1]), np.max(physical_points[:, 1])),
+            (np.min(physical_points[:, 2]), np.max(physical_points[:, 2]))]
+
+
+def find_indexes_in_box(points, box):
+    """
+    :param points: [Nx3] array containing point coordinates
+    :param box: list of tuples like [(box_x_min, box_x_max), (box_y_min, box_y_max), (box_z_min, box_z_max)]
+    :return: The indexes of the points contained in the bounding box
+    """
+
+    x_in_box = np.logical_and(points[:, 0] >= box[0][0], points[:, 0] <= box[0][1])
+    y_in_box = np.logical_and(points[:, 1] >= box[1][0], points[:, 1] <= box[1][1])
+    z_in_box = np.logical_and(points[:, 2] >= box[2][0], points[:, 2] <= box[2][1])
+
+    x_y_in_box = np.logical_and(x_in_box, y_in_box)
+    indexes_in_box = np.logical_and(x_y_in_box, z_in_box)
+
+    return np.argwhere(indexes_in_box).flatten()
 
 
 def grid2physicalspace(grid_size, spacing, T_data2world):
@@ -50,7 +90,7 @@ def grid2physicalspace(grid_size, spacing, T_data2world):
 
     # getting the indexes list with the first dimension changing slowelier and last one changing faster
     indexes_list = list(itertools.product(*a))
-    physical_points = indexes2pyhsicalspace(indexes_list, spacing, physical_size, T_data2world)
+    physical_points = voxels2pyhsicalspace(indexes_list, spacing, physical_size, T_data2world)
 
     physical_points = np.reshape(physical_points, grid_size.append(3))
 
@@ -82,28 +122,9 @@ def get_grid_indexes(grid_size):
     return np.array(indexes_list)
 
 
-def get_bounding_box(physical_points):
-    """
-
-    :param physical_points:
-    :return:
-    """
-
-    return [(np.min(physical_points[0, :]), np.max(physical_points[0, :])),
-            (np.min(physical_points[1, :]), np.max(physical_points[1, :])),
-            (np.min(physical_points[2, :]), np.max(physical_points[2, :]))]
 
 
-def find_indexes_in_box(points, box):
 
-    x_in_box = np.logical_and(points[0, :] >= box[0][0], points[0, :] <= box[0][1])
-    y_in_box = np.logical_and(points[1, :] >= box[1][0], points[1, :] <= box[1][1])
-    z_in_box = np.logical_and(points[2, :] >= box[2][0], points[2, :] <= box[2][1])
-
-    x_y_in_box = np.logical_and(x_in_box, y_in_box)
-    indexes_in_box = np.logical_and(x_y_in_box, z_in_box)
-
-    return np.argwhere(indexes_in_box).flatten()
 
 
 def volume2slices(volume, T_vol2world, vol_spacing, image_size, img_spacing, T_img2world):
@@ -117,9 +138,9 @@ def volume2slices(volume, T_vol2world, vol_spacing, image_size, img_spacing, T_i
         image_size.append(1)
 
     vol_size = volume.shape
-    vol_indexes = get_grid_indexes(vol_size)
     vol_physical_size = np.array([vol_size[i] * vol_spacing[i] for i in range(3)])
-    vol_points = indexes2pyhsicalspace(vol_indexes, vol_spacing, vol_physical_size, T_vol2world)
+    vol_indexes = get_grid_indexes(vol_size)
+    vol_points = voxels2pyhsicalspace(vol_indexes, vol_spacing, vol_physical_size, T_vol2world)
 
     images_list = []
     for i, T_img in enumerate(T_img2world):
@@ -127,7 +148,7 @@ def volume2slices(volume, T_vol2world, vol_spacing, image_size, img_spacing, T_i
         t1 = time.time()
         img_indexes = get_grid_indexes(image_size)
         img_physical_size = np.array([image_size[i] * img_spacing[i] for i in range(3)])
-        img_points = indexes2pyhsicalspace(img_indexes, img_spacing, img_physical_size, T_img)
+        img_points = voxels2pyhsicalspace(img_indexes, img_spacing, img_physical_size, T_img)
         print("\nTime to find image physical indexes: ", time.time() - t1, " s")
 
         bounding_box = get_bounding_box(img_points)
@@ -145,17 +166,16 @@ def volume2slices(volume, T_vol2world, vol_spacing, image_size, img_spacing, T_i
             continue
 
         print("points in box: ", vol_idxes_in_box.size)
-        vol_points_bb = vol_points[..., vol_idxes_in_box]
+        vol_points_bb = vol_points[vol_idxes_in_box, ...]
         vol_indexes_bb = vol_indexes[vol_idxes_in_box, ...]
 
         t1 = time.time()
-        ind, _ = get_closest_points(np.transpose(vol_points_bb[0:3, ...]), np.transpose(img_points[0:3, ...]))
+        ind, _ = get_closest_points(vol_points_bb, img_points)
         print("Time to find closest points: ", time.time() - t1, " s")
 
         vol_ind = vol_indexes_bb[ind, ...]
 
-        img_ind, vol_ind = np.array(img_indexes), np.array(vol_ind)
-        image[img_ind[:, 0], img_ind[:, 1], img_ind[:, 2]] = volume[
+        image[img_indexes[:, 0], img_indexes[:, 1], img_indexes[:, 2]] = volume[
             vol_ind[:, 0], vol_ind[:, 1], vol_ind[:, 2]]
 
         vol_colored[vol_indexes_bb[:, 0], vol_indexes_bb[:, 1], vol_indexes_bb[:, 2]] = i
@@ -205,7 +225,7 @@ def main():
         imfusion_image.spacing = us_spacing
         label_maps.add(imfusion_image)
 
-    label_maps.modality = imfusion.Data.Modality.LABEL
+    #label_maps.modality = imfusion.Data.Modality.LABEL
     imfusion.executeAlgorithm('IO;ImFusionFile', [label_maps],
                               imfusion.Properties({'location': "C:/Users/maria/OneDrive/Desktop/JaneSimulatedData/image_labelmap.imf"}))
 
