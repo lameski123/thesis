@@ -25,7 +25,8 @@ def create_parser():
                         help='dataset to use')
     parser.add_argument('--dataset_path', type=str, default='./spine_clouds', metavar='N', help='dataset to use')
     parser.add_argument('--model_path', type=str, default='', metavar='N', help='Pretrained model path')
-    parser.add_argument('--test_output_path', type=str, required=False, metavar='N', help='Pretrained model path')
+    parser.add_argument('--test_output_path', type=str, required=False, metavar='N', help='Path to save the test results')
+    parser.add_argument('--no_legacy_model', action='store_true', help='use legacy model in test mode')
     parser.add_argument('--loss', nargs='+', default=[],
                         help='list of possible losses, currently [biomechanical, rigidity, chamfer] '
                              'or leave it empty only for flow loss')

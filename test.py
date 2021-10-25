@@ -121,7 +121,7 @@ def get_color_array(vertebrae_idxs):
     return color_array
 
 
-def test_one_epoch(net, test_loader, args, save_results=False, args=None, wandb_table: wandb.Table=None):
+def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None):
     net.eval()
 
     total_loss = 0
@@ -197,6 +197,8 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
+    args = utils.update_args(args)
+
     assert os.path.exists(args.model_path), f'model path {args.model_path} does not exist'
 
     torch.backends.cudnn.deterministic = True
@@ -206,6 +208,8 @@ def main():
 
     # boardio = SummaryWriter(log_dir='checkpoints/' + args.exp_name)
     boardio = []
+    if args.test_output_path is None:
+        args.test_output_path = args.checkpoints_dir
     args.test_output_path = create_output_paths(args.test_output_path, args.exp_name)
 
     wandb.login(key=args.wandb_key)
@@ -214,8 +218,10 @@ def main():
     textio = utils.IOStream(args.test_output_path + '/run.log')
     textio.cprint(str(args))
 
-    net = FlowNet3DLegacy(args).cuda()
-
+    if args.no_legacy_model:
+        net = FlowNet3D(args).cuda()
+    else:
+        net = FlowNet3DLegacy(args).cuda()
     net.load_state_dict(torch.load(args.model_path))
     net.eval()
 
