@@ -233,7 +233,7 @@ def append_avg_metrics(result_list):
     return result_list
 
 
-def run_cpd(data_batch, save_path, plot_iterations=False):
+def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
 
     # ##############################################################################################################
     # ############################################## Getting the data ##############################################
@@ -249,7 +249,7 @@ def run_cpd(data_batch, save_path, plot_iterations=False):
     # ##############################################################################################################
 
     # 1.a First iteration to alight the spines
-    cpd_method = BiomechanicalCpd(target_pc=target_pc, source_pc=source_pc, max_iterations=5)
+    cpd_method = BiomechanicalCpd(target_pc=target_pc, source_pc=source_pc, max_iterations=cpd_iterations)
     source_pc_it1, predicted_T_it1 = run_registration(cpd_method, with_callback=plot_iterations)
 
     # ##############################################################################################################
@@ -271,7 +271,8 @@ def run_cpd(data_batch, save_path, plot_iterations=False):
         target_vertebra = get_closest_points(target_pc, vertebra['source'])
 
         # 2.e Running the constrained registration for the given vertebra
-        reg = BiomechanicalCpd(target_pc=target_vertebra, source_pc=vertebra['source'], springs=vertebra['springs'])
+        reg = BiomechanicalCpd(target_pc=target_vertebra, source_pc=vertebra['source'], springs=vertebra['springs'],
+                               max_iterations=cpd_iterations)
         source_pc_it2, predicted_T_it2 = run_registration(reg, with_callback=plot_iterations)
 
         # 2.f Computing the overall transformation for the given vertebra
@@ -308,7 +309,7 @@ def run_cpd(data_batch, save_path, plot_iterations=False):
     return average_result
 
 
-def main(dataset_path, save_path, wandb_key=None):
+def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
 
     wandb.login(key=wandb_key)
     wandb.init(project='spine_flownet')  # , mode = "disabled"
@@ -322,7 +323,10 @@ def main(dataset_path, save_path, wandb_key=None):
 
     results = []
     for i, data in enumerate(test_set):
-        results.append(run_cpd(data, save_path, plot_iterations=False))
+        results.append(run_cpd(data_batch = data,
+                               save_path = save_path,
+                               cpd_iterations = cpd_iterations,
+                               plot_iterations=False))
 
     results = append_avg_metrics(results)
 
@@ -338,8 +342,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
     parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
     parser.add_argument('--wandb-key', type=str, required=True)
+    parser.add_argument('--cpd-iterations', type=int, default=100)
     parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")
 
     args = parser.parse_args()
 
-    main(args.dataset_path, args.save_path)
+    main(args.dataset_path, args.save_path, cpd_iterations=args.cpd_iterations)
