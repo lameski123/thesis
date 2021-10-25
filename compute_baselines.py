@@ -6,9 +6,11 @@ from constrained_cpd.BiomechanicalCPD import BiomechanicalCpd
 import numpy as np
 from functools import partial
 import matplotlib.pyplot as plt
-from test_utils.metrics import umeyama_absolute_orientation, pose_distance
+from test_utils.metrics import umeyama_absolute_orientation, pose_distance, np_chamfer_distance
 import os
 from sklearn.neighbors import KDTree
+from sklearn.metrics import mean_squared_error
+import wandb
 
 
 def get_closest_points(pc1, pc2):
@@ -23,13 +25,7 @@ def get_closest_points(pc1, pc2):
     return points
 
 
-def visualize(iteration, error, X, Y, ax, file_id, vertebra, save_path):
-
-    if not os.path.exists(os.path.join(save_path, str(file_id))):
-        os.makedirs(os.path.join(save_path, str(file_id)))
-
-    np.savetxt(os.path.join(save_path, str(file_id), "source_vert" + str(vertebra)) + ".txt", X)
-    np.savetxt(os.path.join(save_path, str(file_id), "predicted_vert" + str(vertebra))+ ".txt", Y)
+def visualize(iteration, error, X, Y, ax):
 
     plt.cla()
     ax.scatter(X[:, 0],  X[:, 1], X[:, 2], color='red', alpha=0.1)
@@ -101,44 +97,79 @@ def read_batch_data(data):
     return color1, color2, constraint, flow, pc1, pc2, position1, file_name
 
 
-def run_cpd(data_batch, save_path):
-    # source_pc, target_pc, _, _, gt_flow, _, constraint, position1, _ = data_batch
+def get_gt_transform(source_pc, gt_flow):
+    R_gt, t_gt = umeyama_absolute_orientation(from_points=source_pc,
+                                              to_points=source_pc + gt_flow, fix_scaling=True)
 
-    source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name = data_batch
+    T = np.eye(4)
+    T[0:3, 0:3] = R_gt
+    T[0:3, -1] = t_gt
+    return T
 
-    # pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095 - 8, -1)]), \
-    # vertebrae_point_inx_src, vertebrae_point_inx_tar, fn.split('/')[-1].split('.')[0]
 
-    constrain_pairs = get_connected_idxes(constraint)
-
+def get_fig_ax():
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
-    callback = partial(visualize, ax=ax, file_id=file_name, vertebra=0, save_path=save_path)
+
     ax.set_xlim([-40, 40])
     ax.set_ylim([-40, 40])
     ax.set_zlim([0, 200])
 
-    # First iteration to alight the spines
+    return fig, ax
 
-    cpd_method = BiomechanicalCpd(target_pc=target_pc,
-                                  source_pc=source_pc,
-                                  max_iterations=5)
 
-    TY, (_, R_reg, t_reg) = cpd_method.register(callback)
-    plt.close(fig)
+def run_registration(cpd_method, with_callback=False):
+    if with_callback:
+        fig, ax = get_fig_ax()
+        callback = partial(visualize, ax=ax)
+        TY, (_, R_reg, t_reg) = cpd_method.register(callback)
+        plt.close(fig)
+    else:
+        TY, (_, R_reg, t_reg) = cpd_method.register()
 
-    source_pc = TY
+    T = np.eye(4)
+    T[0:3, 0:3] = np.transpose(R_reg)
+    T[0:3, -1] = t_reg
 
-    # 2. Generating the data for running the constrained CPD
-    source_vertebrae_list = []
-    gt_flow_list = []
-    vertebrae_springs = []
+    return TY, T
+
+
+def get_result_dict(source, gt_flow, predicted_pc, predicted_T, position=None):
+
+    result = []
+
+    if position is None:
+        position = [[i for i in range(source.shape[0])]]
+
+    for vertebral_level_idxes in position:
+
+        # 2.a Extracting the points belonging to the first vertebra
+        current_vertebra = source[vertebral_level_idxes, ...]
+        current_flow = gt_flow[vertebral_level_idxes, ...]
+        predicted_vertebra = predicted_pc[vertebral_level_idxes, ...]
+        gt_T = get_gt_transform(source_pc=current_vertebra,
+                                gt_flow=current_flow)
+
+        translation_distance, quaternion_distance = pose_distance(gt_T, predicted_T)
+        mse_loss = mean_squared_error(current_vertebra + current_flow, predicted_vertebra)
+        chamfer_dist = np_chamfer_distance(current_vertebra + current_flow, predicted_vertebra)
+        result.append( { 'mse loss': mse_loss,
+                         'Chamfer Distance': chamfer_dist,
+                         'translation distance': translation_distance,
+                         'quaternion distance': quaternion_distance})
+
+    return result
+
+
+def preprocess_input(source_pc, gt_flow, position1, constrain_pairs):
+
+    vertebra_dict = []
+
     for vertebral_level_idxes in position1:
 
         # 2.a Extracting the points belonging to the first vertebra
         current_vertebra = source_pc[vertebral_level_idxes, ...]
         current_flow = gt_flow[vertebral_level_idxes, ...]
-        source_vertebrae_list.append(current_vertebra)
 
         # 2.b Getting all the springs connections starting from the current vertebra
         current_vertebra_springs = get_springs_from_vertebra(vertebral_level_idxes, constrain_pairs)
@@ -149,55 +180,171 @@ def run_cpd(data_batch, save_path):
         current_vertebra_connections = [(np.argwhere(vertebral_level_idxes == item[0]), source_pc[item[1]])
                                         for item in current_vertebra_springs]
 
-        vertebrae_springs.append(current_vertebra_connections)
-        gt_flow_list.append(current_flow)
+        gt_T = get_gt_transform(source_pc=current_vertebra,
+                                gt_flow=current_flow)
 
-    # 2.4 Iterate over all vertebrae and apply the constrained CPD
-    for i, source_vertebra in enumerate(source_vertebrae_list):
-        target_vertebra = get_closest_points(target_pc, source_vertebra)
-        reg = BiomechanicalCpd(target_pc=target_vertebra,
-                               source_pc=source_vertebra,
-                               springs=vertebrae_springs[i])
+        vertebra_dict.append({'source': current_vertebra,
+                              'gt_flow': current_flow,
+                              'springs': current_vertebra_connections,
+                              'gt_transform': gt_T})
 
-        fig = plt.figure()
-        ax = fig.add_subplot(projection='3d')
-        ax.set_xlim([-40, 40])
-        ax.set_ylim([-40, 40])
-        ax.set_zlim([0, 200])
-
-        callback = partial(visualize, ax=ax, file_id=file_name, vertebra=i, save_path=save_path)
-
-        TY, (_, R_reg, t_reg) = reg.register(callback)
-        plt.close(fig)
-
-        R_gt, t_gt = umeyama_absolute_orientation(from_points=source_vertebra,
-                                                  to_points=source_vertebra + gt_flow_list[i], fix_scaling=True)
-
-        predicted_T = gt_T = np.eye(4)
-        predicted_T[0:3, 0:3] = R_reg
-        predicted_T[0:3, -1] = t_reg
-
-        gt_T[0:3, 0:3] = R_gt
-        gt_T[0:3, -1] = t_gt
-
-        print(pose_distance(predicted_T, gt_T))
+    return vertebra_dict
 
 
-    # todo: save metrics
+def save_data(data_dict, save_path, postfix=""):
 
-def main(dataset_path, save_path):
+    if not os.path.exists(os.path.join(save_path, postfix)):
+        os.makedirs(os.path.join(save_path, postfix))
+
+    for key in data_dict.keys():
+        np.savetxt(os.path.join(save_path, postfix, key + ".txt"), data_dict[key])
+
+
+def make_homogeneous(pc):
+    if pc.shape[0] != 3:
+        pc = np.transpose(pc)
+
+    assert pc.shape[0] == 3
+
+    return np.concatenate((pc, np.ones((1, pc.shape[1]))), axis=0)
+
+
+def get_average_metrics_over_vertebrae(result_list):
+    """
+    :param result_list: list of dict containing the losses for each vertebrae
+    """
+
+    average_dict = dict()
+    for key in result_list[0].keys():
+        average_dict[key] = np.mean([item[key] for item in result_list])
+
+    return average_dict
+
+
+def append_avg_metrics(result_list):
+    average_dict = dict()
+    for key in result_list[0].keys():
+        if key == "id":
+            average_dict[key] = "Average"
+            continue
+        average_dict[key] = np.mean([item[key] for item in result_list])
+
+    result_list.append(average_dict)
+    return result_list
+
+
+def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
+
+    # ##############################################################################################################
+    # ############################################## Getting the data ##############################################
+    # ##############################################################################################################
+    source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name = data_batch
+    constrain_pairs = get_connected_idxes(constraint)
+
+    # Preprocessing and saving unprocessed data
+    vertebra_dict = preprocess_input(source_pc, gt_flow, position1, constrain_pairs)
+
+    # ##############################################################################################################
+    # ################################ 1.  1st CPD iteration on the full spine #####################################
+    # ##############################################################################################################
+
+    # 1.a First iteration to alight the spines
+    cpd_method = BiomechanicalCpd(target_pc=target_pc, source_pc=source_pc, max_iterations=cpd_iterations)
+    source_pc_it1, predicted_T_it1 = run_registration(cpd_method, with_callback=plot_iterations)
+
+    # ##############################################################################################################
+    # ################################ 2.  2nd CPD iteration on each vertebra ######################################
+    # ##############################################################################################################
+
+    # 2.a Getting the updated data to run the constrained CPD
+    updated_source = source_pc_it1
+    updated_gt_flow = source_pc + gt_flow - source_pc_it1  # the flow to move the source to target after iteration 1
+
+    # 2.b Getting the updated pre-processed input data
+    vertebra_dict_it1 = preprocess_input(updated_source, updated_gt_flow, position1, constrain_pairs)
+
+    # 2.c Iterate over all vertebrae and apply the constrained CPD
+    result_iter2 = []
+    for i, vertebra in enumerate(vertebra_dict_it1):
+
+        # 2.d Selecting the target vertebra by proximity
+        target_vertebra = get_closest_points(target_pc, vertebra['source'])
+
+        # 2.e Running the constrained registration for the given vertebra
+        reg = BiomechanicalCpd(target_pc=target_vertebra, source_pc=vertebra['source'], springs=vertebra['springs'],
+                               max_iterations=cpd_iterations)
+        source_pc_it2, predicted_T_it2 = run_registration(reg, with_callback=plot_iterations)
+
+        # 2.f Computing the overall transformation for the given vertebra
+        original_source_vertebra = vertebra_dict[i]['source']
+        homogenous_source = make_homogeneous(original_source_vertebra)
+        overall_T = np.matmul(predicted_T_it2, predicted_T_it1)
+        predicted_pc = np.matmul(overall_T, homogenous_source)
+        predicted_pc = np.transpose(predicted_pc)[..., 0:3]
+
+        # 2.g Sanity check using ground truth transform
+        predicted_gt = np.matmul(vertebra_dict[i]['gt_transform'], homogenous_source) # sanity check
+        predicted_gt = np.transpose(predicted_gt)[..., 0:3]
+
+        result_iter2.extend(get_result_dict(original_source_vertebra,
+                                            vertebra_dict[i]['gt_flow'],
+                                            predicted_pc,
+                                            overall_T,
+                                            position=None))
+
+        # 2.h Saving data after second iteration
+        save_data(data_dict={'source' + "_v" + str(i): original_source_vertebra,
+                             'target': target_pc,
+                             'gt_flow' + "_v" + str(i): vertebra_dict[i]['gt_flow'],
+                             'predicted_pc' + "_v" + str(i): predicted_pc,
+                             'predicted_gt' + "_v" + str(i): predicted_gt,
+                             'moved_source' + "_v" + str(i): source_pc_it2,  # sanity check
+                             'predicted_T' + "_v" + str(i): overall_T
+                             },
+                  save_path=os.path.join(save_path, file_name))
+
+    average_result = get_average_metrics_over_vertebrae(result_iter2)
+    average_result['id'] = file_name
+
+    return average_result
+
+
+def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
+
+    wandb.login(key=wandb_key)
+    wandb.init(project='spine_flownet')  # , mode = "disabled"
+    wandb.run.name = "cpd-baseline"
+
+    test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
+    columns = ['id', 'mse loss', 'Chamfer Distance', 'quaternion distance', 'translation distance']
+    test_table = wandb.Table(columns=columns)
+
     test_set = SceneflowDataset(mode="test", root=dataset_path, raycasted=True)
 
-    for data in test_set:
+    results = []
+    for i, data in enumerate(test_set):
+        results.append(run_cpd(data_batch = data,
+                               save_path = save_path,
+                               cpd_iterations = cpd_iterations,
+                               plot_iterations=False))
 
-        run_cpd(data, save_path)
+    results = append_avg_metrics(results)
+
+    for data in results:
+        table_entry = [data[item] for item in columns]
+        test_table.add_data(*table_entry)
+
+    test_data_at.add(test_table, "test prediction")
+    wandb.run.log_artifact(test_data_at)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
     parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
+    parser.add_argument('--wandb-key', type=str, required=True)
+    parser.add_argument('--cpd-iterations', type=int, default=100)
     parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")
 
     args = parser.parse_args()
 
-    main(args.dataset_path, args.save_path)
+    main(args.dataset_path, args.save_path, cpd_iterations=args.cpd_iterations)
