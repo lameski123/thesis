@@ -121,7 +121,7 @@ def get_color_array(vertebrae_idxs):
     return color_array
 
 
-def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table: wandb.Table=None):
+def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None):
     net.eval()
 
     total_loss = 0
@@ -140,7 +140,8 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
         batch_size = pc1.size(0)
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                ['all'], pc1, pc2, position1)
+                                                                                ['all'], pc1, pc2, position1, args.loss_coeff)
+                                                                                
 
         test_metrics.extend(compute_test_metrics(file_id=fn,
                                                  source_pc=pc1,
@@ -161,7 +162,7 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
         # chamfer_loss_total += chamfer_loss.item() / len(test_loader)
         # total_loss += loss.item() / len(test_loader)
 
-        if save_results:
+        if save_results and args.wandb_sweep_id is None:
             # Saving the point clouds
             save_data(save_path=result_path,
                       file_id=fn,
@@ -196,6 +197,8 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
+    args = utils.update_args(args)
+
     assert os.path.exists(args.model_path), f'model path {args.model_path} does not exist'
 
     torch.backends.cudnn.deterministic = True
@@ -205,6 +208,8 @@ def main():
 
     # boardio = SummaryWriter(log_dir='checkpoints/' + args.exp_name)
     boardio = []
+    if args.test_output_path is None:
+        args.test_output_path = args.checkpoints_dir
     args.test_output_path = create_output_paths(args.test_output_path, args.exp_name)
 
     wandb.login(key=args.wandb_key)
@@ -213,8 +218,11 @@ def main():
     textio = utils.IOStream(args.test_output_path + '/run.log')
     textio.cprint(str(args))
 
-    net = FlowNet3DLegacy(args).cuda()
 
+    if args.no_legacy_model:
+        net = FlowNet3D(args).cuda()
+    else:
+        net = FlowNet3DLegacy(args).cuda()
     net.load_state_dict(torch.load(args.model_path))
     net.eval()
 
@@ -223,7 +231,7 @@ def main():
 
 def test(args, net, textio):
 
-    test_set = SceneflowDataset(npoints=2046, mode="test", root=args.dataset_path)
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path, raycasted=args.use_raycasted_data)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
@@ -233,7 +241,7 @@ def test(args, net, textio):
     test_table = wandb.Table(columns=columns)
 
     with torch.no_grad():
-        test_loss = test_one_epoch(net, test_loader, save_results=True, args=args, wandb_table=test_table)
+        test_loss = test_one_epoch(net, test_loader, args=args, save_results=True, wandb_table=test_table)
 
     textio.cprint('==FINAL TEST==')
     textio.cprint(f'mean test loss: {test_loss}')
