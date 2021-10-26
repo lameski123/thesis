@@ -107,9 +107,9 @@ def train_wandb():
         net.apply(utils.weights_init)
 
 
-        train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path)
+        train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
         train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-        val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path)
+        val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path, raycasted=args.use_raycasted_data)
         val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
 
         if torch.cuda.device_count() > 1:
@@ -149,9 +149,9 @@ def main():
     wandb.login(key=args.wandb_key)
     wandb.init(project='spine_flownet', config=args)
 
-    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path)
+    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path, raycasted=args.use_raycasted_data)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
 
     if torch.cuda.device_count() > 1:

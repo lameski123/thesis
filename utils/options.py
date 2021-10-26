@@ -24,6 +24,7 @@ def create_parser():
     parser.add_argument('--dataset', type=str, default='SceneflowDataset', choices=['SceneflowDataset'], metavar='N',
                         help='dataset to use')
     parser.add_argument('--dataset_path', type=str, default='./spine_clouds', metavar='N', help='dataset to use')
+    parser.add_argument('--use_raycasted_data', action='store_true', help='train on raycasted')
     parser.add_argument('--model_path', type=str, default='', metavar='N', help='Pretrained model path')
     parser.add_argument('--test_output_path', type=str, required=False, metavar='N', help='Path to save the test results')
     parser.add_argument('--no_legacy_model', action='store_true', help='use legacy model in test mode')

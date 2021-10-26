@@ -218,6 +218,7 @@ def main():
     textio = utils.IOStream(args.test_output_path + '/run.log')
     textio.cprint(str(args))
 
+
     if args.no_legacy_model:
         net = FlowNet3D(args).cuda()
     else:
@@ -230,7 +231,7 @@ def main():
 
 def test(args, net, textio):
 
-    test_set = SceneflowDataset(npoints=2046, mode="test", root=args.dataset_path)
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path, raycasted=args.use_raycasted_data)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
