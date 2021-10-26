@@ -1,30 +1,30 @@
-<!--ImFusion Suite, 21.10.2021-->
+<!--ImFusion Suite, 25.10.2021-->
 <propertyfile version="1.1">
     <param name="workspaceVersion">16</param>
     <property name="Datasets">
         <property name="Data">
             <param name="uid">data0</param>
-            <param name="name">spine12_vert10</param>
+            <param name="name">spine6_vert10</param>
             <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
         </property>
         <property name="Data">
             <param name="uid">data1</param>
-            <param name="name">spine12_vert20</param>
+            <param name="name">spine6_vert20</param>
             <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
         </property>
         <property name="Data">
             <param name="uid">data2</param>
-            <param name="name">spine12_vert30</param>
+            <param name="name">spine6_vert30</param>
             <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
         </property>
         <property name="Data">
             <param name="uid">data3</param>
-            <param name="name">spine12_vert40</param>
+            <param name="name">spine6_vert40</param>
             <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
         </property>
         <property name="Data">
             <param name="uid">data4</param>
-            <param name="name">spine12_vert50</param>
+            <param name="name">spine6_vert50</param>
             <param name="transformation">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 </param>
         </property>
         <property name="Data">
@@ -39,7 +39,7 @@
     </property>
     <property name="Algorithms">
         <property name="Mesh File">
-            <param name="location">%(Input1)</param>
+            <param name="location">%(INPUT1)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -48,7 +48,7 @@
             <param name="outputUids">"data0" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input2)</param>
+            <param name="location">%(INPUT2)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -57,7 +57,7 @@
             <param name="outputUids">"data1" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input3)</param>
+            <param name="location">%(INPUT3)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -66,7 +66,7 @@
             <param name="outputUids">"data2" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input4)</param>
+            <param name="location">%(INPUT4)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -75,7 +75,7 @@
             <param name="outputUids">"data3" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input5)</param>
+            <param name="location">%(INPUT5)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -83,11 +83,11 @@
             <param name="inputUids"></param>
             <param name="outputUids">"data4" </param>
         </property>
-	    <property name="Combine Meshes">
+        <property name="Combine Meshes">
             <param name="Remesh">1</param>
             <param name="Iso Level">8</param>
             <param name="Max distance">10</param>
-            <param name="execute">1</param>
+	    <param name="execute">1</param>
             <param name="inputUids">"data0" "data1" "data2" "data3" "data4" </param>
             <param name="outputUids">"data5"</param>
         </property>
@@ -99,10 +99,10 @@
             <param name="execute">1</param>
             <param name="inputUids">"data5" </param>
             <param name="outputUids">"data6" </param>
-       </property>
+        </property>
         <property name="Image Resampling">
             <param name="resamplingMode">2</param>
-            <param name="targetDimensions">264 258 376 </param>
+            <param name="targetDimensions">266 252 370 </param>
             <param name="targetPercent">200 200 200 </param>
             <param name="targetSpacing">0.5 0.5 0.5 </param>
             <param name="targetBinning">1 1 1 </param>
@@ -156,10 +156,9 @@
             <param name="sliceFlipY">0</param>
             <param name="dataFlipX">0</param>
             <param name="dataFlipY">0</param>
-            <param name="prepare">0</param>
-            <param name="execute">1</param>
+	   <param name="execute">1</param>
             <param name="inputUids">"data7" </param>
-            <param name="outputUids"></param>
+            <param name="outputUids">"data8"</param>
             <property name="SplineTransducer">
                 <param name="visible">1</param>
                 <param name="alwaysVisible">0</param>
@@ -169,15 +168,15 @@
                 <param name="labelVisible">1</param>
                 <param name="labelDepthTest">1</param>
                 <param name="labelColor">0 1 1 </param>
-                <param name="labelText">155.5 mm</param>
+                <param name="labelText">143.6 mm</param>
                 <param name="name">Transducer Spline</param>
-                <param name="points">-4.7814998626709 211.29066166151 -357.043226539837 
--4.7814998626709 208.12989986011 -512.520019788782 
+                <param name="points">11.2500495910645 282.929171857507 -205.216756152704 
+11.2500495910645 284.484333914047 -348.845448135827 
 </param>
                 <param name="pointSize">5</param>
                 <param name="maxPoints">-1</param>
                 <param name="pointColor">1 1 0 1 </param>
-                <param name="labelPixelOffset">0 -1.52439575670857 </param>
+                <param name="labelPixelOffset">0 -0.8120265948969 </param>
                 <param name="lengthAsLabel">1</param>
                 <param name="isClosed">0</param>
             </property>
@@ -190,26 +189,26 @@
                 <param name="labelVisible">1</param>
                 <param name="labelDepthTest">1</param>
                 <param name="labelColor">0 1 1 </param>
-                <param name="labelText">154.0 mm</param>
+                <param name="labelText">153.8 mm</param>
                 <param name="name">Direction Spline</param>
-                <param name="points">-4.7814998626709 95.1326654600452 -357.043226539837 
--4.7814998626709 88.8111418572443 -510.933521898487 
+                <param name="points">11.2500495910645 169.402341730079 -200.533211848907 
+11.2500495910645 169.402341730079 -354.309583156924 
 </param>
                 <param name="pointSize">5</param>
                 <param name="maxPoints">-1</param>
                 <param name="pointColor">1 1 0 1 </param>
-                <param name="labelPixelOffset">0 -3.07826274325515 </param>
+                <param name="labelPixelOffset">0 0 </param>
                 <param name="lengthAsLabel">1</param>
                 <param name="isClosed">0</param>
             </property>
             <property name="FrameGeometry">
                 <param name="type">Convex</param>
-                <param name="offset">0 -28.7916248125399 </param>
+                <param name="offset">0 -38.7916248125399 </param>
                 <param name="isTopDown">1</param>
                 <param name="indicatorPosition">0</param>
                 <param name="coordinateSystem">1</param>
                 <param name="shortRadius">23.3358574029062</param>
-                <param name="longRadius">93.3358574029062</param>
+                <param name="longRadius">113.335857402906</param>
                 <param name="openingAngle">40</param>
             </property>
             <property name="AcousticParameters">
@@ -349,7 +348,7 @@
             </property>
         </property>
         <property name="ImFusionFile">
-            <param name="location">%(Output)</param>
+            <param name="location">%(OUTPUT1)</param>
             <param name="compressionMode">0</param>
             <param name="passes">1</param>
             <param name="dx">3</param>
@@ -357,8 +356,8 @@
             <param name="ignoredDataComponentIds"></param>
             <param name="blockId">-1</param>
             <param name="execute">1</param>
-            <param name="inputUids">"data8" </param>
-            <param name="outputUids"></param>
+            <param name="inputUids">"data8"</param>
+            <param name="outputUids"> </param>
         </property>
         <property name="ImFusionFile">
             <param name="location">%(OUTPUT2)</param>
@@ -384,7 +383,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">spine12_vert10</param>
+            <param name="name">spine6_vert10</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -422,7 +421,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">spine12_vert20</param>
+            <param name="name">spine6_vert20</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -460,7 +459,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">spine12_vert30</param>
+            <param name="name">spine6_vert30</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -498,7 +497,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">spine12_vert40</param>
+            <param name="name">spine6_vert40</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -536,7 +535,7 @@
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
             <param name="labelText"></param>
-            <param name="name">spine12_vert50</param>
+            <param name="name">spine6_vert50</param>
             <param name="renderCrossSection">0</param>
             <param name="crossSectionColor">1 0 0 0.5 </param>
             <param name="renderMode">0</param>
@@ -611,15 +610,15 @@
             <param name="labelVisible">1</param>
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
-            <param name="labelText">155.5 mm</param>
+            <param name="labelText">143.6 mm</param>
             <param name="name">Transducer Spline</param>
-            <param name="points">-4.7814998626709 211.29066166151 -357.043226539837 
--4.7814998626709 208.12989986011 -512.520019788782 
+            <param name="points">11.2500495910645 282.929171857507 -205.216756152704 
+11.2500495910645 284.484333914047 -348.845448135827 
 </param>
             <param name="pointSize">5</param>
             <param name="maxPoints">-1</param>
             <param name="pointColor">1 1 0 1 </param>
-            <param name="labelPixelOffset">0 -1.52439575670857 </param>
+            <param name="labelPixelOffset">0 -0.8120265948969 </param>
             <param name="lengthAsLabel">1</param>
             <param name="isClosed">0</param>
             <param name="parentDataUid">data7</param>
@@ -633,15 +632,15 @@
             <param name="labelVisible">1</param>
             <param name="labelDepthTest">1</param>
             <param name="labelColor">0 1 1 </param>
-            <param name="labelText">154.0 mm</param>
+            <param name="labelText">153.8 mm</param>
             <param name="name">Direction Spline</param>
-            <param name="points">-4.7814998626709 95.1326654600452 -357.043226539837 
--4.7814998626709 88.8111418572443 -510.933521898487 
+            <param name="points">11.2500495910645 169.402341730079 -200.533211848907 
+11.2500495910645 169.402341730079 -354.309583156924 
 </param>
             <param name="pointSize">5</param>
             <param name="maxPoints">-1</param>
             <param name="pointColor">1 1 0 1 </param>
-            <param name="labelPixelOffset">0 -3.07826274325515 </param>
+            <param name="labelPixelOffset">0 0 </param>
             <param name="lengthAsLabel">1</param>
             <param name="isClosed">0</param>
             <param name="parentDataUid">data7</param>
@@ -673,8 +672,8 @@
                 <param name="zoom">1</param>
                 <param name="showZoom">1</param>
                 <param name="showIn3D">1</param>
-                <param name="viewMatrix">1 0 0 -4.7814998626709 0 1 0 174.713889832586 0 0 1 -434.859186443079 0 0 0 1 </param>
-                <param name="sliceMatrix">1 0 0 -4.7814998626709 0 1 0 174.713889832586 0 0 1 -434.859186443079 0 0 0 1 </param>
+                <param name="viewMatrix">1 0 0 11.2500495910645 0 1 0 238.743391816664 0 0 1 -277.346630764938 0 0 0 1 </param>
+                <param name="sliceMatrix">1 0 0 11.2500495910645 0 1 0 238.743391816664 0 0 1 -277.346630764938 0 0 0 1 </param>
                 <param name="showOrientationMarkers">0</param>
                 <param name="displayOptionsSource">1</param>
                 <param name="sliceThickness">0</param>
@@ -687,8 +686,8 @@
                 <param name="zoom">1</param>
                 <param name="showZoom">1</param>
                 <param name="showIn3D">1</param>
-                <param name="viewMatrix">0 0 -1 -4.7814998626709 1 0 0 174.713889832586 0 -1 0 -434.859186443079 0 0 0 1 </param>
-                <param name="sliceMatrix">0 0 -1 -4.7814998626709 1 0 0 174.713889832586 0 -1 0 -434.859186443079 0 0 0 1 </param>
+                <param name="viewMatrix">0 0 -1 11.2500495910645 1 0 0 238.743391816664 0 -1 0 -277.346630764938 0 0 0 1 </param>
+                <param name="sliceMatrix">0 0 -1 11.2500495910645 1 0 0 238.743391816664 0 -1 0 -277.346630764938 0 0 0 1 </param>
                 <param name="showOrientationMarkers">0</param>
                 <param name="displayOptionsSource">1</param>
                 <param name="sliceThickness">0</param>
@@ -701,8 +700,8 @@
                 <param name="zoom">1</param>
                 <param name="showZoom">1</param>
                 <param name="showIn3D">1</param>
-                <param name="viewMatrix">1 0 0 -4.7814998626709 0 0 1 174.713889832586 0 -1 0 -434.859186443079 0 0 0 1 </param>
-                <param name="sliceMatrix">1 0 0 -4.7814998626709 0 0 1 174.713889832586 0 -1 0 -434.859186443079 0 0 0 1 </param>
+                <param name="viewMatrix">1 0 0 11.2500495910645 0 0 1 238.743391816664 0 -1 0 -277.346630764938 0 0 0 1 </param>
+                <param name="sliceMatrix">1 0 0 11.2500495910645 0 0 1 238.743391816664 0 -1 0 -277.346630764938 0 0 0 1 </param>
                 <param name="showOrientationMarkers">0</param>
                 <param name="displayOptionsSource">1</param>
                 <param name="sliceThickness">0</param>
@@ -710,10 +709,10 @@
             <property name="4">
                 <param name="viewOptionsSource">0</param>
                 <param name="renderMode">4</param>
-                <param name="sceneCenter">-4.7814998626709 174.713889832586 -434.859186443079 </param>
+                <param name="sceneCenter">11.2500495910645 238.743391816664 -277.346630764938 </param>
                 <param name="displayOptionsSource">1</param>
                 <property name="Camera">
-                    <param name="poseMatrix">-0.987215029381085 0.149693033067496 -0.0547583931023947 -54.6860108909102 0.149130709272749 0.988714975411115 0.014238291667323 -165.837518893106 0.0562718163551676 0.00589009752469666 -0.998398111694548 -746.186448378624 -0 0 -0 1 </param>
+                    <param name="poseMatrix">0.983310572065153 -0.0658563125402904 0.169597361310537 51.6977234753577 0.0801381681808174 0.993665409645802 -0.0787840572328123 -259.983101427417 -0.163334604005166 0.0910604182509372 0.982359306650291 -52.7309697109809 0 0 0 1 </param>
                     <param name="mode">0</param>
                     <param name="principalPoint">0.5 0.5 </param>
                     <param name="focalLength">1.37373870972731 1.37373870972731 </param>
@@ -731,16 +730,16 @@
                 <param name="visible">"data8" </param>
             </property>
             <property name="1">
-                <param name="visible">"data8" </param>
+                <param name="visible">"data8" "data7" </param>
             </property>
             <property name="2">
-                <param name="visible">"data8" </param>
+                <param name="visible">"data8" "data7" </param>
             </property>
             <property name="3">
-                <param name="visible">"data8" </param>
+                <param name="visible">"data8" "data7" </param>
             </property>
             <property name="4">
-                <param name="visible"></param>
+                <param name="visible">"data7" </param>
             </property>
         </property>
     </property>
