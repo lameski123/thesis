@@ -11,3 +11,7 @@ var
 *.swp
 .DS_Store
 ./.polyaxon
+./checkpoints
+./imfusion_workspaces
+./wandb
+*.ipynb

@@ -52,7 +52,7 @@ def train(args, net, train_loader, val_loader, textio):
                 torch.save(net.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
 
         scheduler.step()
-        wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses['total_loss']})
+        wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses[args.sweep_target_loss]})
 
         args.lr = scheduler.get_last_lr()[0]
 

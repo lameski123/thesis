@@ -39,6 +39,8 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
 
     batch_size = source_pc.shape[0]
 
+    q_dist_batch = 0
+    tr_dist_batch = 0
     metric_dict_list = []
     for i in range(batch_size):
 
@@ -54,8 +56,10 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
             "quaternion distance": np.mean(quaternion_distance_list),
             "translation distance": np.mean(translation_distance_list)
         })
+        q_dist_batch += np.mean(quaternion_distance_list)
+        tr_dist_batch += np.mean(translation_distance_list)
 
-    return metric_dict_list
+    return metric_dict_list, q_dist_batch/batch_size, tr_dist_batch/batch_size
 
 
 def save_metrics2csv(metric_dict_list):
@@ -125,6 +129,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
     net.eval()
     total_loss = 0
     mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total = 0.0, 0.0, 0.0, 0.0
+    quaternion_distance_total, translation_distance_total = 0.0, 0.0
 
     # Initializing the save folder if save_results is set to True
     result_path = os.path.join(args.test_output_path, args.exp_name, 'test_result/')
@@ -140,26 +145,26 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
                                                                                 ['all'], pc1, pc2, position1, args.loss_coeff)
-
-
-        test_metrics.extend(compute_test_metrics(file_id=fn,
-                                                 source_pc=pc1,
-                                                 source_color=source_color,
-                                                 gt_flow=flow,
-                                                 estimated_flow=flow_pred))
-
+        metrics, quaternion_distance, translation_distance = compute_test_metrics(file_id=fn,
+                                                             source_pc=pc1,
+                                                             source_color=source_color,
+                                                             gt_flow=flow,
+                                                             estimated_flow=flow_pred)
+        test_metrics.extend(metrics)
         # Adding the network losses to the losses list of dicts
         for item in test_metrics:
             item["mse loss"] = mse_loss.item()
             item["biomechanical loss"] = bio_loss.item()
             item["rigidity loss"] = rig_loss.item()
             item["Chamfer loss"] = chamfer_loss.item()
-
-        # mse_loss_total += mse_loss.item() / len(test_loader)
-        # bio_loss_total += bio_loss.item() / len(test_loader)
-        # rig_loss_total += rig_loss.item() / len(test_loader)
-        # chamfer_loss_total += chamfer_loss.item() / len(test_loader)
-        # total_loss += loss.item() / len(test_loader)
+            
+        mse_loss_total += mse_loss.item() / len(test_loader)
+        bio_loss_total += bio_loss.item() / len(test_loader)
+        rig_loss_total += rig_loss.item() / len(test_loader)
+        chamfer_loss_total += chamfer_loss.item() / len(test_loader)
+        quaternion_distance_total += quaternion_distance / len(test_loader)
+        translation_distance_total += translation_distance / len(test_loader)
+        total_loss += loss.item() / len(test_loader)
 
         if save_results and args.wandb_sweep_id is None:
             # Saving the point clouds
@@ -177,11 +182,10 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
 
     if wandb_table is not None:
         log_metrics_dict2wandb(test_metrics, wandb_table)
-            # for j in range(test_loader.batch_size):
-            #     wandb_table.add_data(fn[j], mse_loss.item(), bio_loss.item(), chamfer_loss.item(), rig_loss.item())
 
     losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
-              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total}
+              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total,
+              'quaternion_distance': quaternion_distance_total, 'translation_distance': translation_distance_total}
     return losses
 
 

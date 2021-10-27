@@ -12,6 +12,8 @@ parameters:
   loss:
     value: 'biomechanical'
 #    values: ['biomechanical', 'rigidity', 'chamfer']
+  sweep_target_loss:
+    value: 'quaternion_distance'
   loss_coeff:
     distribution: 'log_uniform'
     min: 3

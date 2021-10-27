@@ -13,6 +13,7 @@ build:
   image: "mfazampour/spine_flownet"
   build_steps:
     - "pip install matplotlib"
+    - "pip install pyquaternion==0.9.9"
 
 
 environment:
@@ -32,8 +33,8 @@ environment:
 params:
   dataset_path: '/data/Spine_Flownet/spine_clouds/'
   wandb_key: d3424a60f5e39087781fde8ff973ee92dd6da70d
-  wandb_sweep_id: mop6c5s3
-  wandb_sweep_count: 5
+  wandb_sweep_id: k9rd9alw
+  wandb_sweep_count: 10
   epoch: 30
 
 run:
