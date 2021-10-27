@@ -44,8 +44,7 @@ def weights_init(m):
 
 def create_paths(args):
     os.makedirs(args.checkpoints_dir, exist_ok=True)
-    os.makedirs(os.path.join(args.checkpoints_dir, args.exp_name), exist_ok=True)
-    os.makedirs(os.path.join(args.checkpoints_dir, args.exp_name, 'models'), exist_ok=True)
+    os.makedirs(os.path.join(args.checkpoints_dir, 'models'), exist_ok=True)
 
 
 def update_args(args):
@@ -78,4 +77,8 @@ def update_args(args):
         args.checkpoints_dir = os.path.join('checkpoints/', 'flownet3d/', f'{now.strftime("%m.%d.%Y_%H.%M.%S")}/')
         print("You are Running on the local Machine")
         print(args)
+
+    if args.test_output_path is None:
+        args.test_output_path = args.checkpoints_dir
+
     return args

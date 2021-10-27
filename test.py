@@ -123,7 +123,6 @@ def get_color_array(vertebrae_idxs):
 
 def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None):
     net.eval()
-
     total_loss = 0
     mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total = 0.0, 0.0, 0.0, 0.0
 
@@ -141,7 +140,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
                                                                                 ['all'], pc1, pc2, position1, args.loss_coeff)
-                                                                                
+
 
         test_metrics.extend(compute_test_metrics(file_id=fn,
                                                  source_pc=pc1,
@@ -208,8 +207,7 @@ def main():
 
     # boardio = SummaryWriter(log_dir='checkpoints/' + args.exp_name)
     boardio = []
-    if args.test_output_path is None:
-        args.test_output_path = args.checkpoints_dir
+
     args.test_output_path = create_output_paths(args.test_output_path, args.exp_name)
 
     wandb.login(key=args.wandb_key)

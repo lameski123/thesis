@@ -39,7 +39,8 @@ def train(args, net, train_loader, val_loader, textio):
         train_losses = train_one_epoch(net, train_loader, opt, args.loss, args)
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
-        test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
+        with torch.no_grad():
+            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
         test_loss = test_losses['total_loss']
         textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
@@ -84,6 +85,29 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
     return losses
 
 
+def run_experiment(args):
+    torch.backends.cudnn.deterministic = True
+    torch.manual_seed(100)
+    torch.cuda.manual_seed_all(100)
+    np.random.seed(100)
+    utils.create_paths(args)
+    textio = utils.IOStream(os.path.join(args.checkpoints_dir, 'run.log'))
+    textio.cprint(str(args))
+    net = FlowNet3D(args).cuda()
+    net.apply(utils.weights_init)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
+    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path,
+                               raycasted=args.use_raycasted_data)
+    val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
+    if torch.cuda.device_count() > 1:
+        net = nn.DataParallel(net)
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+    train(args, net, train_loader, val_loader, textio)
+    # test after training
+    test(args, net, textio)
+
+
 def train_wandb():
     global args
     with wandb.init(project='spine_flownet', config=args):
@@ -93,33 +117,7 @@ def train_wandb():
         print('-------------------config---------------------')
         print(args)
 
-        torch.backends.cudnn.deterministic = True
-        torch.manual_seed(100)
-        torch.cuda.manual_seed_all(100)
-        np.random.seed(100)
-
-        utils.create_paths(args)
-
-        textio = utils.IOStream(os.path.join(args.checkpoints_dir, 'run.log'))
-        textio.cprint(str(args))
-
-        net = FlowNet3D(args).cuda()
-        net.apply(utils.weights_init)
-
-
-        train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
-        train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-        val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path, raycasted=args.use_raycasted_data)
-        val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
-
-        if torch.cuda.device_count() > 1:
-            net = nn.DataParallel(net)
-            print("Let's use", torch.cuda.device_count(), "GPUs!")
-
-        train(args, net, train_loader, val_loader, textio)
-
-        # test after training
-        test(args, net, textio)
+        run_experiment(args)
 
 
 def main():
@@ -127,41 +125,15 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
-
     if args.wandb_sweep_id is not None:
-         wandb.agent(args.wandb_sweep_id, train_wandb, count=args.wandb_sweep_count, project='spine_flownet')
+        wandb.agent(args.wandb_sweep_id, train_wandb, count=args.wandb_sweep_count, project='spine_flownet')
+    else:
+        args = utils.update_args(args)
 
-    args = utils.update_args(args)
+        wandb.login(key=args.wandb_key)
+        wandb.init(project='spine_flownet', config=args)
 
-    torch.backends.cudnn.deterministic = True
-    torch.manual_seed(100)
-    torch.cuda.manual_seed_all(100)
-    np.random.seed(100)
-
-    utils.create_paths(args)
-
-    textio = utils.IOStream(os.path.join(args.checkpoints_dir, 'run.log'))
-    textio.cprint(str(args))
-
-    net = FlowNet3D(args).cuda()
-    net.apply(utils.weights_init)
-
-    wandb.login(key=args.wandb_key)
-    wandb.init(project='spine_flownet', config=args)
-
-    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path, raycasted=args.use_raycasted_data)
-    val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
-
-    if torch.cuda.device_count() > 1:
-        net = nn.DataParallel(net)
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-
-    train(args, net, train_loader, val_loader, textio)
-
-    # test after training
-    test(args, net, textio)
+        run_experiment(args)
 
 
 if __name__ == '__main__':
