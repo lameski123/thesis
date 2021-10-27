@@ -59,10 +59,10 @@ def update_args(args):
             try:
                 coeffs.append(float(coeff))
             except:
-                raise Exception('loss coefficient is should be a float number')
+                raise Exception('loss coefficient should be a float number')
         assert len(coeffs) == len(args.loss), 'number of coefficients should be the same as the losses'
     else:
-        coeffs = np.ones((len(args.loss), 1))
+        coeffs = np.ones(len(args.loss))
     args.loss_coeff = {}
     for loss, coeff in zip(args.loss, coeffs):
         args.loss_coeff[loss] = coeff
