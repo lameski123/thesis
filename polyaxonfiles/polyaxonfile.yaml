@@ -33,5 +33,5 @@ params:
   wandb_key: d3424a60f5e39087781fde8ff973ee92dd6da70d
 
 run:
-    cmd: python train.py --dataset_path {{ dataset_path }} --loss {{ loss }} --wandb-key {{ wandb_key }}
+    cmd: python train.py --dataset_path {{ dataset_path }} --loss {{ loss }} --wandb_key {{ wandb_key }}
 

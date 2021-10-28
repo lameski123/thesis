@@ -24,10 +24,20 @@ def create_parser():
     parser.add_argument('--dataset', type=str, default='SceneflowDataset', choices=['SceneflowDataset'], metavar='N',
                         help='dataset to use')
     parser.add_argument('--dataset_path', type=str, default='./spine_clouds', metavar='N', help='dataset to use')
+    parser.add_argument('--use_raycasted_data', action='store_true', help='train on raycasted')
     parser.add_argument('--model_path', type=str, default='', metavar='N', help='Pretrained model path')
-    parser.add_argument('--test_output_path', type=str, required=False, metavar='N', help='Pretrained model path')
+    parser.add_argument('--test_output_path', type=str, required=False, metavar='N', help='Path to save the test results')
+    parser.add_argument('--no_legacy_model', action='store_true', help='use legacy model in test mode')
     parser.add_argument('--loss', nargs='+', default=[],
                         help='list of possible losses, currently [biomechanical, rigidity, chamfer] '
                              'or leave it empty only for flow loss')
-    parser.add_argument('--wandb-key', type=str, required=True, help='key to login to your wandb account')
+    parser.add_argument('--loss_coeff', nargs='+', default=[],
+                        help='list of coefficients for each loss, in the same order as the loss')
+    parser.add_argument('--wandb_key', type=str, required=True, help='key to login to your wandb account')
+    parser.add_argument('--wandb_sweep_id', type=str, default=None, help='sweep id for wandb')
+    parser.add_argument('--wandb_sweep_count', type=int, default=10, help='number of times sweeping the HP range')
+    parser.add_argument('--sweep_target_loss', type=str, default='total_loss',
+                        choices=['total_loss', 'mse_loss', 'biomechanical_loss', 'rigid_loss', 'chamfer_loss',
+                                 'quaternion_distance', 'translation_distance'],
+                        help='which loss to use as target for sweep')
     return parser

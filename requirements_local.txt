@@ -8,4 +8,5 @@ lib==3.0.0
 scikit_learn==0.24.2
 torch==1.9.1
 wandb==0.12.2
-matplotlib
+matplotlib==3.4.3
+pyquaternion==0.9.9

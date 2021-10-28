@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import torch
@@ -20,8 +21,9 @@ from data import SceneflowDataset
 from model import FlowNet3D
 from test import test_one_epoch, test
 
+args = None
 
-def train(args, net, train_loader, test_loader, textio):
+def train(args, net, train_loader, val_loader, textio):
     if args.use_sgd:
         print("Use SGD")
         opt = optim.SGD(net.parameters(), lr=args.lr * 100, momentum=args.momentum, weight_decay=1e-4)
@@ -34,27 +36,28 @@ def train(args, net, train_loader, test_loader, textio):
     best_test_loss = np.inf
     for epoch in range(args.epochs):
         textio.cprint('==epoch: %d, learning rate: %f==' % (epoch, opt.param_groups[0]['lr']))
-        train_losses = train_one_epoch(net, train_loader, opt, args.loss)
+        train_losses = train_one_epoch(net, train_loader, opt, args.loss, args)
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
-        test_losses = test_one_epoch(net, test_loader, wandb_table=None)
+        with torch.no_grad():
+            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
         test_loss = test_losses['total_loss']
         textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
             best_test_loss = test_loss
             textio.cprint('best test loss till now: %f' % test_loss)
             if torch.cuda.device_count() > 1:
-                torch.save(net.module.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
+                torch.save(net.module.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
             else:
-                torch.save(net.state_dict(), f'{os.path.join(args.checkpoints_dir, args.exp_name)}/models/model_spine_bio.best.t7')
+                torch.save(net.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
 
         scheduler.step()
-        wandb.log({'Train': train_losses, 'Validation': test_losses})
+        wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses[args.sweep_target_loss]})
 
         args.lr = scheduler.get_last_lr()[0]
 
 
-def train_one_epoch(net, train_loader, opt, loss_opt):
+def train_one_epoch(net, train_loader, opt, loss_opt, args):
     net.train()
     total_loss = 0
     mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total = 0.0, 0.0, 0.0, 0.0
@@ -64,7 +67,8 @@ def train_one_epoch(net, train_loader, opt, loss_opt):
         opt.zero_grad()
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                loss_opt, pc1, pc2, position1)
+                                                                                loss_opt, pc1, pc2, position1,
+                                                                                args.loss_coeff)
         mse_loss_total += mse_loss.item() / len(train_loader)
         bio_loss_total += bio_loss.item() / len(train_loader)
         rig_loss_total += rig_loss.item() / len(train_loader)
@@ -73,51 +77,63 @@ def train_one_epoch(net, train_loader, opt, loss_opt):
 
         loss.backward()
         opt.step()
-        if i % 50 == 0:
+        if i % 50 == 0 and args.wandb_sweep_id is None:  # plot only if not in sweep mode
             utils.plot_pointcloud(flow_pred, pc1, pc2)
-        # for j in range(train_loader.batch_size):
-        #     utils.plot_pointcloud(flow_pred[j:j+1, ...], pc1[j:j+1, ...], pc2[j:j+1, ...], fn[j:j+1])
 
     losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
               'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total}
     return losses
 
 
-def main():
-    parser = utils.create_parser()
-    args = parser.parse_args()
-
-    args = utils.update_args_for_cluster(args)
-
+def run_experiment(args):
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(100)
     torch.cuda.manual_seed_all(100)
     np.random.seed(100)
-
     utils.create_paths(args)
-
     textio = utils.IOStream(os.path.join(args.checkpoints_dir, 'run.log'))
     textio.cprint(str(args))
-
     net = FlowNet3D(args).cuda()
     net.apply(utils.weights_init)
-
-    wandb.login(key=args.wandb_key)
-    wandb.init(project='spine_flownet', config=args)
-
-    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path)
+    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path,
+                               raycasted=args.use_raycasted_data)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
-
     if torch.cuda.device_count() > 1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
-
     train(args, net, train_loader, val_loader, textio)
-
     # test after training
     test(args, net, textio)
+
+
+def train_wandb():
+    global args
+    with wandb.init(project='spine_flownet', config=args):
+        config = wandb.config
+        args = SimpleNamespace(**config)
+        args = utils.update_args(args)
+        print('-------------------config---------------------')
+        print(args)
+
+        run_experiment(args)
+
+
+def main():
+    global args
+    parser = utils.create_parser()
+    args = parser.parse_args()
+
+    if args.wandb_sweep_id is not None:
+        wandb.agent(args.wandb_sweep_id, train_wandb, count=args.wandb_sweep_count, project='spine_flownet')
+    else:
+        args = utils.update_args(args)
+
+        wandb.login(key=args.wandb_key)
+        wandb.init(project='spine_flownet', config=args)
+
+        run_experiment(args)
 
 
 if __name__ == '__main__':

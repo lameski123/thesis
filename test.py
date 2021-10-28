@@ -23,7 +23,7 @@ def tensor2numpy(*args):
         yield item
 
 
-def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_flow, tre_points):
+def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_flow):
     """
     :param: file_id: str: The id of the file
     :param: source_pc: np.ndarray() with size [n_batches, 3, n_points] containing the source points
@@ -39,25 +39,27 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
 
     batch_size = source_pc.shape[0]
 
+    q_dist_batch = 0
+    tr_dist_batch = 0
     metric_dict_list = []
     for i in range(batch_size):
 
         # error in terms of quaternion distance and translation distance. Point clouds are transposed as the function
         # expects [n_points x 3] arrays and not [3 x n_points] arrays.
-        quaternion_distance_list, translation_distance_list, tre = vertebrae_pose_error(
+        quaternion_distance_list, translation_distance_list = vertebrae_pose_error(
             source=np.transpose(source_pc[i, ...]),
             gt_flow=np.transpose(gt_flow[i, ...]),
-            predicted_flow=np.transpose(estimated_flow[i, ...]),
-            tre_points=tre_points)
+            predicted_flow=np.transpose(estimated_flow[i, ...]))
 
         metric_dict_list.append({
             "id": file_id,
             "quaternion distance": np.mean(quaternion_distance_list),
-            "translation distance": np.mean(translation_distance_list),
-            "TRE": np.mean(tre)
+            "translation distance": np.mean(translation_distance_list)
         })
+        q_dist_batch += np.mean(quaternion_distance_list)
+        tr_dist_batch += np.mean(translation_distance_list)
 
-    return metric_dict_list
+    return metric_dict_list, q_dist_batch/batch_size, tr_dist_batch/batch_size
 
 
 def save_metrics2csv(metric_dict_list):
@@ -76,8 +78,7 @@ def log_metrics_dict2wandb(metric_dict_list, wandb_table):
         "mse loss": np.mean([item["mse loss"] for item in metric_dict_list]),
         "biomechanical loss": np.mean([item["biomechanical loss"] for item in metric_dict_list]),
         "rigidity loss": np.mean([item["rigidity loss"] for item in metric_dict_list]),
-        "Chamfer loss": np.mean([item["Chamfer loss"] for item in metric_dict_list]),
-        "TRE": np.mean([item["TRE"] for item in metric_dict_list])
+        "Chamfer loss": np.mean([item["Chamfer loss"] for item in metric_dict_list])
     })
 
     # Logging to wandb
@@ -124,11 +125,11 @@ def get_color_array(vertebrae_idxs):
     return color_array
 
 
-def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table: wandb.Table=None):
+def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None):
     net.eval()
-
     total_loss = 0
     mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total = 0.0, 0.0, 0.0, 0.0
+    quaternion_distance_total, translation_distance_total = 0.0, 0.0
 
     # Initializing the save folder if save_results is set to True
     result_path = os.path.join(args.test_output_path, args.exp_name, 'test_result/')
@@ -137,35 +138,35 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
 
     test_metrics = []
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
-        color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = utils.read_batch_data(data)
+        color1, color2, constraint, flow, pc1, pc2, position1, fn = utils.read_batch_data(data)
         source_color = get_color_array(position1)
 
         batch_size = pc1.size(0)
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                ['all'], pc1, pc2, position1)
-
-        test_metrics.extend(compute_test_metrics(file_id=fn,
-                                                 source_pc=pc1,
-                                                 source_color=source_color,
-                                                 gt_flow=flow,
-                                                 estimated_flow=flow_pred,
-                                                 tre_points = tre_points))
-
+                                                                                ['all'], pc1, pc2, position1, args.loss_coeff)
+        metrics, quaternion_distance, translation_distance = compute_test_metrics(file_id=fn,
+                                                             source_pc=pc1,
+                                                             source_color=source_color,
+                                                             gt_flow=flow,
+                                                             estimated_flow=flow_pred)
+        test_metrics.extend(metrics)
         # Adding the network losses to the losses list of dicts
         for item in test_metrics:
             item["mse loss"] = mse_loss.item()
             item["biomechanical loss"] = bio_loss.item()
             item["rigidity loss"] = rig_loss.item()
             item["Chamfer loss"] = chamfer_loss.item()
+            
+        mse_loss_total += mse_loss.item() / len(test_loader)
+        bio_loss_total += bio_loss.item() / len(test_loader)
+        rig_loss_total += rig_loss.item() / len(test_loader)
+        chamfer_loss_total += chamfer_loss.item() / len(test_loader)
+        quaternion_distance_total += quaternion_distance / len(test_loader)
+        translation_distance_total += translation_distance / len(test_loader)
+        total_loss += loss.item() / len(test_loader)
 
-        # mse_loss_total += mse_loss.item() / len(test_loader)
-        # bio_loss_total += bio_loss.item() / len(test_loader)
-        # rig_loss_total += rig_loss.item() / len(test_loader)
-        # chamfer_loss_total += chamfer_loss.item() / len(test_loader)
-        # total_loss += loss.item() / len(test_loader)
-
-        if save_results:
+        if save_results and args.wandb_sweep_id is None:
             # Saving the point clouds
             save_data(save_path=result_path,
                       file_id=fn,
@@ -181,11 +182,10 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
 
     if wandb_table is not None:
         log_metrics_dict2wandb(test_metrics, wandb_table)
-            # for j in range(test_loader.batch_size):
-            #     wandb_table.add_data(fn[j], mse_loss.item(), bio_loss.item(), chamfer_loss.item(), rig_loss.item())
 
     losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
-              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total}
+              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total,
+              'quaternion_distance': quaternion_distance_total, 'translation_distance': translation_distance_total}
     return losses
 
 
@@ -200,6 +200,8 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
+    args = utils.update_args(args)
+
     assert os.path.exists(args.model_path), f'model path {args.model_path} does not exist'
 
     torch.backends.cudnn.deterministic = True
@@ -209,6 +211,7 @@ def main():
 
     # boardio = SummaryWriter(log_dir='checkpoints/' + args.exp_name)
     boardio = []
+
     args.test_output_path = create_output_paths(args.test_output_path, args.exp_name)
 
     wandb.login(key=args.wandb_key)
@@ -217,8 +220,11 @@ def main():
     textio = utils.IOStream(args.test_output_path + '/run.log')
     textio.cprint(str(args))
 
-    net = FlowNet3DLegacy(args).cuda()
 
+    if args.no_legacy_model:
+        net = FlowNet3D(args).cuda()
+    else:
+        net = FlowNet3DLegacy(args).cuda()
     net.load_state_dict(torch.load(args.model_path))
     net.eval()
 
@@ -227,17 +233,17 @@ def main():
 
 def test(args, net, textio):
 
-    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path)
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path, raycasted=args.use_raycasted_data)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
 
     columns = ['id', "mse loss", "biomechanical loss", "Chamfer loss", 'rigidity loss',
-               'quaternion distance', 'translation distance', 'TRE']
+               'quaternion distance', 'translation distance']
     test_table = wandb.Table(columns=columns)
 
     with torch.no_grad():
-        test_loss = test_one_epoch(net, test_loader, save_results=True, args=args, wandb_table=test_table)
+        test_loss = test_one_epoch(net, test_loader, args=args, save_results=True, wandb_table=test_table)
 
     textio.cprint('==FINAL TEST==')
     textio.cprint(f'mean test loss: {test_loss}')

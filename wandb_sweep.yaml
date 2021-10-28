@@ -1,0 +1,20 @@
+program: train.py
+method: random
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  lr:
+    value: 0.001
+#    distribution: 'log_uniform'
+#    min: -10
+#    max: -4
+  loss:
+    value: 'biomechanical'
+#    values: ['biomechanical', 'rigidity', 'chamfer']
+  sweep_target_loss:
+    value: 'quaternion_distance'
+  loss_coeff:
+    distribution: 'log_uniform'
+    min: 3
+    max: 6

@@ -200,9 +200,17 @@ def read_numpy_file(fp):
 
 
 def _get_spine_number(path: str):
-    name: str = path.split('/')[-1].split('.')[0]
-    num = name.split('_')[1][5:]
-    return int(num)
+    name = os.path.split(path)[-1]
+    name = name.split(".")[0]
+    if "raycasted" in name:
+        num = name.split('_')[1][5:]
+    else:
+        num = name.split('_')[0][5:]
+    # print(path, "  ", name, " ", num)
+    try:
+        return int(num)
+    except:
+        return -1
 
 
 class SceneflowDataset(Dataset):

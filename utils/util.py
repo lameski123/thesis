@@ -1,5 +1,7 @@
 import os
+from datetime import datetime
 
+import numpy as np
 from torch import nn
 
 
@@ -42,11 +44,28 @@ def weights_init(m):
 
 def create_paths(args):
     os.makedirs(args.checkpoints_dir, exist_ok=True)
-    os.makedirs(os.path.join(args.checkpoints_dir, args.exp_name), exist_ok=True)
-    os.makedirs(os.path.join(args.checkpoints_dir, args.exp_name, 'models'), exist_ok=True)
+    os.makedirs(os.path.join(args.checkpoints_dir, 'models'), exist_ok=True)
 
 
-def update_args_for_cluster(args):
+def update_args(args):
+    coeffs = []
+    if isinstance(args.loss_coeff, float):
+        args.loss_coeff = [args.loss_coeff]
+    if isinstance(args.loss, str):
+        args.loss = [args.loss]
+    if len(args.loss_coeff) != 0:
+        for coeff in args.loss_coeff:
+            try:
+                coeffs.append(float(coeff))
+            except:
+                raise Exception('loss coefficient should be a float number')
+        assert len(coeffs) == len(args.loss), 'number of coefficients should be the same as the losses'
+    else:
+        coeffs = np.ones(len(args.loss))
+    args.loss_coeff = {}
+    for loss, coeff in zip(args.loss, coeffs):
+        args.loss_coeff[loss] = coeff
+
     try:
         from polyaxon_client.tracking import Experiment
         args.checkpoints_dir = Experiment().get_outputs_path()
@@ -54,7 +73,12 @@ def update_args_for_cluster(args):
         print(args)
     except Exception as e:
         print(e)
-        args.checkpoints_dir = 'checkpoints/' + "flownet3d/"
+        now = datetime.now()
+        args.checkpoints_dir = os.path.join('checkpoints/', 'flownet3d/', f'{now.strftime("%m.%d.%Y_%H.%M.%S")}/')
         print("You are Running on the local Machine")
         print(args)
+
+    if args.test_output_path is None:
+        args.test_output_path = args.checkpoints_dir
+
     return args
