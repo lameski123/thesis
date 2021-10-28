@@ -158,7 +158,7 @@
             <param name="dataFlipX">0</param>
             <param name="dataFlipY">0</param>
             <param name="prepare">0</param>
-            <param name="execute">0</param>
+            <param name="execute">1</param>
             <param name="inputUids">"data7" </param>
             <param name="outputUids">"data8"</param>
             <property name="SplineTransducer">
@@ -357,7 +357,7 @@
             <param name="dy">3</param>
             <param name="ignoredDataComponentIds"></param>
             <param name="blockId">-1</param>
-            <param name="execute">0</param>
+            <param name="execute">1</param>
             <param name="inputUids">"data8" </param>
             <param name="outputUids"> </param>
         </property>
