@@ -118,8 +118,6 @@
             <param name="inputUids">"data6" </param>
             <param name="outputUids">"data7" </param>
         </property>
-        
-
         <property name="Hybrid Ultrasound Simulation">
             <param name="attenuationCoefficient">0.8</param>
             <param name="gain">0</param>

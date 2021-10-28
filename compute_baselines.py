@@ -86,15 +86,15 @@ def get_springs_from_vertebra(vertebral_level_idxes, constraints_pairs):
 
 
 def read_batch_data(data):
-    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2, file_name = data
+    pc1, pc2, color1, color2, flow, mask1, constraint, position1, position2, file_name, tre = data
     pc1 = pc1.transpose(2, 1).contiguous().float()
     pc2 = pc2.transpose(2, 1).contiguous().float()
     color1 = color1.transpose(2, 1).contiguous().float()
     color2 = color2.transpose(2, 1).contiguous().float()
     flow = flow.transpose(2, 1).contiguous()
-    mask1 = mask1.cuda().float()
-    constraint = constraint.cuda()
-    return color1, color2, constraint, flow, pc1, pc2, position1, file_name
+    # mask1 = mask1.cuda().float()
+    # constraint = constraint.cuda()
+    return color1, color2, constraint, flow, pc1, pc2, position1, file_name, tre
 
 
 def get_gt_transform(source_pc, gt_flow):
@@ -134,14 +134,15 @@ def run_registration(cpd_method, with_callback=False):
     return TY, T
 
 
-def get_result_dict(source, gt_flow, predicted_pc, predicted_T, position=None):
+def get_result_dict(source, gt_flow, predicted_pc, predicted_T, tre_points, position=None):
 
     result = []
 
     if position is None:
         position = [[i for i in range(source.shape[0])]]
+        tre_points[:, -1] = 1
 
-    for vertebral_level_idxes in position:
+    for i, vertebral_level_idxes in enumerate(position):
 
         # 2.a Extracting the points belonging to the first vertebra
         current_vertebra = source[vertebral_level_idxes, ...]
@@ -153,19 +154,28 @@ def get_result_dict(source, gt_flow, predicted_pc, predicted_T, position=None):
         translation_distance, quaternion_distance = pose_distance(gt_T, predicted_T)
         mse_loss = mean_squared_error(current_vertebra + current_flow, predicted_vertebra)
         chamfer_dist = np_chamfer_distance(current_vertebra + current_flow, predicted_vertebra)
+
+        # computing tre loss
+        vertebra_target = tre_points[tre_points[:, -1] == i+1]
+        vertebra_target[:, -1] = 1  # making the points homogeneous
+        gt_registered_target = np.matmul(gt_T, vertebra_target)  # Nx4
+        predicted_registered_target = np.matmul(gt_T, predicted_T)  # Nx4
+        tre = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=1)
+
         result.append( { 'mse loss': mse_loss,
                          'Chamfer Distance': chamfer_dist,
                          'translation distance': translation_distance,
-                         'quaternion distance': quaternion_distance})
+                         'quaternion distance': quaternion_distance,
+                         'TRE': tre})
 
     return result
 
 
-def preprocess_input(source_pc, gt_flow, position1, constrain_pairs):
+def preprocess_input(source_pc, gt_flow, position1, constrain_pairs, tre_points):
 
     vertebra_dict = []
 
-    for vertebral_level_idxes in position1:
+    for i, vertebral_level_idxes in enumerate(position1):
 
         # 2.a Extracting the points belonging to the first vertebra
         current_vertebra = source_pc[vertebral_level_idxes, ...]
@@ -183,10 +193,13 @@ def preprocess_input(source_pc, gt_flow, position1, constrain_pairs):
         gt_T = get_gt_transform(source_pc=current_vertebra,
                                 gt_flow=current_flow)
 
+        tre_point = tre_points[tre_points[-1] == i+1, :]
+
         vertebra_dict.append({'source': current_vertebra,
                               'gt_flow': current_flow,
                               'springs': current_vertebra_connections,
-                              'gt_transform': gt_T})
+                              'gt_transform': gt_T,
+                              'tre_points': tre_point})
 
     return vertebra_dict
 
@@ -238,11 +251,12 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
     # ##############################################################################################################
     # ############################################## Getting the data ##############################################
     # ##############################################################################################################
-    source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name = data_batch
+    source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name, tre_points\
+        = data_batch
     constrain_pairs = get_connected_idxes(constraint)
 
     # Preprocessing and saving unprocessed data
-    vertebra_dict = preprocess_input(source_pc, gt_flow, position1, constrain_pairs)
+    vertebra_dict = preprocess_input(source_pc, gt_flow, position1, constrain_pairs, tre_points)
 
     # ##############################################################################################################
     # ################################ 1.  1st CPD iteration on the full spine #####################################
@@ -261,7 +275,7 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
     updated_gt_flow = source_pc + gt_flow - source_pc_it1  # the flow to move the source to target after iteration 1
 
     # 2.b Getting the updated pre-processed input data
-    vertebra_dict_it1 = preprocess_input(updated_source, updated_gt_flow, position1, constrain_pairs)
+    vertebra_dict_it1 = preprocess_input(updated_source, updated_gt_flow, position1, constrain_pairs, tre_points)
 
     # 2.c Iterate over all vertebrae and apply the constrained CPD
     result_iter2 = []
@@ -283,14 +297,16 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
         predicted_pc = np.transpose(predicted_pc)[..., 0:3]
 
         # 2.g Sanity check using ground truth transform
-        predicted_gt = np.matmul(vertebra_dict[i]['gt_transform'], homogenous_source) # sanity check
+        predicted_gt = np.matmul(vertebra_dict[i]['gt_transform'], homogenous_source)  # sanity check
         predicted_gt = np.transpose(predicted_gt)[..., 0:3]
 
         result_iter2.extend(get_result_dict(original_source_vertebra,
                                             vertebra_dict[i]['gt_flow'],
                                             predicted_pc,
                                             overall_T,
-                                            position=None))
+                                            tre_points=vertebra_dict[i]['tre_points'],
+                                            position=None,
+                                            ))
 
         # 2.h Saving data after second iteration
         save_data(data_dict={'source' + "_v" + str(i): original_source_vertebra,
@@ -316,7 +332,7 @@ def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
     wandb.run.name = "cpd-baseline"
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
-    columns = ['id', 'mse loss', 'Chamfer Distance', 'quaternion distance', 'translation distance']
+    columns = ['id', 'mse loss', 'Chamfer Distance', 'quaternion distance', 'translation distance', 'TRE']
     test_table = wandb.Table(columns=columns)
 
     test_set = SceneflowDataset(mode="test", root=dataset_path, raycasted=True)

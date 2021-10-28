@@ -238,6 +238,13 @@ class SceneflowDataset(Dataset):
         else:
             raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "validation"')
 
+    def get_tre_idx(self, filename):
+        filename = os.path.split(filename)[-1]
+        spine_id = filename.split("_")[0]
+        target_points_filepath = os.path.join(self.root, spine_id + "_facet_targets.txt")
+
+        return np.loadtxt(target_points_filepath)
+
     def __getitem__(self, index):
         fn = self.data_path[index]
         with open(fn, 'rb') as fp:
@@ -320,6 +327,14 @@ class SceneflowDataset(Dataset):
         vertebrae_point_inx_tar = [L1, L2, L3, L4, L5]
         ########################################################################
         mask = np.ones([self.npoints])
+
+        # If mode is test also evaluate the tre
+        if self.mode == "test":
+            tre = self.get_tre_idx(fn)
+
+            return pos1_, pos2_, color1, color2, flow_, mask, np.array(
+                [i for i in range(4095, 4095 - len(constraint), -1)]), \
+                   vertebrae_point_inx_src, vertebrae_point_inx_tar, fn.split('/')[-1].split('.')[0], tre
 
         return pos1_, pos2_, color1, color2, flow_, mask, np.array([i for i in range(4095, 4095 - len(constraint), -1)]), \
                vertebrae_point_inx_src, vertebrae_point_inx_tar, fn.split('/')[-1].split('.')[0]

@@ -23,7 +23,7 @@ def tensor2numpy(*args):
         yield item
 
 
-def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_flow):
+def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_flow, tre_points):
     """
     :param: file_id: str: The id of the file
     :param: source_pc: np.ndarray() with size [n_batches, 3, n_points] containing the source points
@@ -44,15 +44,17 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
 
         # error in terms of quaternion distance and translation distance. Point clouds are transposed as the function
         # expects [n_points x 3] arrays and not [3 x n_points] arrays.
-        quaternion_distance_list, translation_distance_list = vertebrae_pose_error(
+        quaternion_distance_list, translation_distance_list, tre = vertebrae_pose_error(
             source=np.transpose(source_pc[i, ...]),
             gt_flow=np.transpose(gt_flow[i, ...]),
-            predicted_flow=np.transpose(estimated_flow[i, ...]))
+            predicted_flow=np.transpose(estimated_flow[i, ...]),
+            tre_points=tre_points)
 
         metric_dict_list.append({
             "id": file_id,
             "quaternion distance": np.mean(quaternion_distance_list),
-            "translation distance": np.mean(translation_distance_list)
+            "translation distance": np.mean(translation_distance_list),
+            "TRE": np.mean(tre)
         })
 
     return metric_dict_list
@@ -74,7 +76,8 @@ def log_metrics_dict2wandb(metric_dict_list, wandb_table):
         "mse loss": np.mean([item["mse loss"] for item in metric_dict_list]),
         "biomechanical loss": np.mean([item["biomechanical loss"] for item in metric_dict_list]),
         "rigidity loss": np.mean([item["rigidity loss"] for item in metric_dict_list]),
-        "Chamfer loss": np.mean([item["Chamfer loss"] for item in metric_dict_list])
+        "Chamfer loss": np.mean([item["Chamfer loss"] for item in metric_dict_list]),
+        "TRE": np.mean([item["TRE"] for item in metric_dict_list])
     })
 
     # Logging to wandb
@@ -134,7 +137,7 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
 
     test_metrics = []
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
-        color1, color2, constraint, flow, pc1, pc2, position1, fn = utils.read_batch_data(data)
+        color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = utils.read_batch_data(data)
         source_color = get_color_array(position1)
 
         batch_size = pc1.size(0)
@@ -146,7 +149,8 @@ def test_one_epoch(net, test_loader, save_results=False, args=None, wandb_table:
                                                  source_pc=pc1,
                                                  source_color=source_color,
                                                  gt_flow=flow,
-                                                 estimated_flow=flow_pred))
+                                                 estimated_flow=flow_pred,
+                                                 tre_points = tre_points))
 
         # Adding the network losses to the losses list of dicts
         for item in test_metrics:
@@ -223,13 +227,13 @@ def main():
 
 def test(args, net, textio):
 
-    test_set = SceneflowDataset(npoints=2046, mode="test", root=args.dataset_path)
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
 
     columns = ['id', "mse loss", "biomechanical loss", "Chamfer loss", 'rigidity loss',
-               'quaternion distance', 'translation distance']
+               'quaternion distance', 'translation distance', 'TRE']
     test_table = wandb.Table(columns=columns)
 
     with torch.no_grad():

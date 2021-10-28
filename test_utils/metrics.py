@@ -119,7 +119,7 @@ def np_chamfer_distance(x, y, metric='l2', direction='bi'):
     return chamfer_dist
 
 
-def vertebrae_pose_error(source, gt_flow, predicted_flow):
+def vertebrae_pose_error(source, gt_flow, predicted_flow, tre_points=None):
 
     translation_distance_list = []
     quaternion_distance_list = []
@@ -140,5 +140,15 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow):
         # multiplication of the point clouds - the division by 100 should be removed
         quaternion_distance_list.append(quaternion_distance)
 
-    return quaternion_distance_list, translation_distance_list
+        if tre_points is None:
+            return quaternion_distance_list, translation_distance_list
+
+        # todo: check this
+        vertebra_target = tre_points[tre_points[:, -1] == vertebrae_level]
+        vertebra_target[:, -1] = 1  # making the point homogeneous
+        gt_registered_target = np.matmul(gt_T, vertebra_target)  # Nx4
+        predicted_registered_target = np.matmul(gt_T, predicted_T)  # Nx4
+        tre_error = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=1)
+
+    return quaternion_distance_list, translation_distance_list, tre_error
 
