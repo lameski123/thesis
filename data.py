@@ -185,9 +185,9 @@ def augment_data(flow, pos1, pos2, raycasted):
             pos2[indexes, 0] += sample_x[indexes]
             pos2[indexes, 1] += sample_y[indexes]
             pos2[indexes, 2] += sample_z[indexes]
-            pos2[indexes, 3] += sample_x[indexes]
-            pos2[indexes, 4] += sample_y[indexes]
-            pos2[indexes, 5] += sample_z[indexes]
+            # pos2[indexes, 3] += sample_x[indexes]
+            # pos2[indexes, 4] += sample_y[indexes]
+            # pos2[indexes, 5] += sample_z[indexes]
             flow = pos2[:, :3] - pos1[:, :3]
     return flow, pos1, pos2
 
@@ -324,15 +324,16 @@ class SceneflowDataset(Dataset):
 
         for i in range(len(constraint) // 8):
             points_to_delete.extend(np.array(points_to_delete) + 2 * i)
+            #TODO: solve constraint issue:
 
-            # constraint_points.extend([L1[constraint[0 + i], ...],
-            #                           L2[constraint[1 + i], ...],
-            #                           L2[constraint[2 + i], ...],
-            #                           L3[constraint[3 + i], ...],
-            #                           L3[constraint[4 + i], ...],
-            #                           L4[constraint[5 + i], ...],
-            #                           L4[constraint[6 + i], ...],
-            #                           L5[constraint[7 + i], ...]])
+            constraint_points.extend([L1[constraint[0 + i], ...],
+                                      L2[constraint[1 + i], ...],
+                                      L2[constraint[2 + i], ...],
+                                      L3[constraint[3 + i], ...],
+                                      L3[constraint[4 + i], ...],
+                                      L4[constraint[5 + i], ...],
+                                      L4[constraint[6 + i], ...],
+                                      L5[constraint[7 + i], ...]])
         sample_idx_source = np.delete(sample_idx_source, points_to_delete)
         # add the constraint points
         sample_idx_source = np.concatenate((sample_idx_source, constraint_points), axis=0).astype(int)
