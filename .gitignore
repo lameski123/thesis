@@ -13,3 +13,6 @@ check_points/model_spine_rigid.best.t7
 raycastedSpineClouds/
 bone_segmentation_utils/results/
 checkpoints/
+bone_segmentation_utils/data/
+pointnet2/build/
+pointnet2/dist/

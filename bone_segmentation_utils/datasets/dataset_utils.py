@@ -128,7 +128,7 @@ def get_params(opt, size):
 
     return {'crop_pos': (x, y), 'flip': flip}
 
-def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True, num_channels=3):
+def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True, num_channels=3, normalize=True):
     transform_list = []
     if grayscale:
         transform_list.append(transforms.Grayscale(1))
@@ -179,9 +179,11 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
     if convert:
         transform_list += [transforms.ToTensor()]
 
-    transform_list += [
-        transforms.Normalize([0.5 for _ in range(num_channels)], [0.5 for _ in range(num_channels)])]
+    if normalize:
+        transform_list += [
+            transforms.Normalize([0.5 for _ in range(num_channels)], [0.5 for _ in range(num_channels)])]
     return transforms.Compose(transform_list)
+
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)

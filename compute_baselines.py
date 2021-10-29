@@ -158,9 +158,10 @@ def get_result_dict(source, gt_flow, predicted_pc, predicted_T, tre_points, posi
         # computing tre loss
         vertebra_target = tre_points[tre_points[:, -1] == i+1]
         vertebra_target[:, -1] = 1  # making the points homogeneous
+        vertebra_target = np.transpose(vertebra_target)
         gt_registered_target = np.matmul(gt_T, vertebra_target)  # Nx4
-        predicted_registered_target = np.matmul(gt_T, predicted_T)  # Nx4
-        tre = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=1)
+        predicted_registered_target = np.matmul(predicted_T, vertebra_target)  # Nx4
+        tre = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=0)
 
         result.append( { 'mse loss': mse_loss,
                          'Chamfer Distance': chamfer_dist,
@@ -193,7 +194,7 @@ def preprocess_input(source_pc, gt_flow, position1, constrain_pairs, tre_points)
         gt_T = get_gt_transform(source_pc=current_vertebra,
                                 gt_flow=current_flow)
 
-        tre_point = tre_points[tre_points[-1] == i+1, :]
+        tre_point = tre_points[tre_points[:, -1] == i+1, :]
 
         vertebra_dict.append({'source': current_vertebra,
                               'gt_flow': current_flow,
@@ -309,7 +310,9 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
                                             ))
 
         # 2.h Saving data after second iteration
+        print(os.path.join(save_path, file_name))
         save_data(data_dict={'source' + "_v" + str(i): original_source_vertebra,
+                             'tre_points' + "_v" + str(i): vertebra_dict[i]['tre_points'],
                              'target': target_pc,
                              'gt_flow' + "_v" + str(i): vertebra_dict[i]['gt_flow'],
                              'predicted_pc' + "_v" + str(i): predicted_pc,
@@ -328,7 +331,7 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
 def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
 
     wandb.login(key=wandb_key)
-    wandb.init(project='spine_flownet')  # , mode = "disabled"
+    wandb.init(project='spine_flownet', mode = "disabled")  # , mode = "disabled"
     wandb.run.name = "cpd-baseline"
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
@@ -339,6 +342,8 @@ def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
 
     results = []
     for i, data in enumerate(test_set):
+        if i > 2:
+            continue
         results.append(run_cpd(data_batch = data,
                                save_path = save_path,
                                cpd_iterations = cpd_iterations,

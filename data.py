@@ -195,20 +195,23 @@ def read_numpy_file(fp):
     pos1 = data["pc1"].astype('float32')
     pos2 = data["pc2"].astype('float32')
     flow = data["flow"].astype('float32')
-    constraint = data["cstPts"].astype('int')
+    constraint = data["ctsPts"].astype('int')
     return constraint, flow, pos1, pos2
 
 
 def _get_spine_number(path: str):
     name = os.path.split(path)[-1]
-    name = name.split(".")[0]
-    if "raycasted" in name:
-        num = name.split('_')[1][5:]
-    else:
-        num = name.split('_')[0][5:]
-    # print(path, "  ", name, " ", num)
+    name = name.split("ts")[0]
+    name = name.replace("raycasted", "")
+    name = name.replace("spine", "")
+    name.strip("_")
+    # if "raycasted" in name:
+    #     num = name.split('_')[1][5:]
+    # else:
+    #     num = name.split('_')[0][5:]
+    # # print(path, "  ", name, " ", num)
     try:
-        return int(num)
+        return int(name)
     except:
         return -1
 
@@ -248,7 +251,7 @@ class SceneflowDataset(Dataset):
 
     def get_tre_idx(self, filename):
         filename = os.path.split(filename)[-1]
-        spine_id = filename.split("_")[0]
+        spine_id = [item for item in filename.split("_") if "spine" in item][0]
         target_points_filepath = os.path.join(self.root, spine_id + "_facet_targets.txt")
 
         return np.loadtxt(target_points_filepath)

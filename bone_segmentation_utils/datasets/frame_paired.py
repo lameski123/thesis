@@ -26,10 +26,10 @@ class FramePaired(BasePairedDataset):
 
         # apply the same transform to both A and B
         transform_params = get_params(self.hparams, A.size)
-        A_transform = get_transform(self.hparams, transform_params, grayscale=(self.input_nc == 1))
+        A_transform = get_transform(self.hparams, transform_params, grayscale=(self.input_nc == 1), normalize=False)
         B_transform = get_transform(self.hparams, transform_params, grayscale=(self.output_nc == 1))
 
-        A = A_transform(A) if A is not None else None
+        A = A_transform(A)*255 if A is not None else None
         B = B_transform(B) if B is not None else None
 
         return {'Image': B,
