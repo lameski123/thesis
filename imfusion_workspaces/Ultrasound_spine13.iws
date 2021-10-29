@@ -39,7 +39,7 @@
     </property>
     <property name="Algorithms">
         <property name="Mesh File">
-            <param name="location">%(Input1)</param>
+            <param name="location">%(INPUT1)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -48,7 +48,7 @@
             <param name="outputUids">"data0" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input2)</param>
+            <param name="location">%(INPUT2)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -57,7 +57,7 @@
             <param name="outputUids">"data1" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input3)</param>
+            <param name="location">%(INPUT3)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -66,7 +66,7 @@
             <param name="outputUids">"data2" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input4)</param>
+            <param name="location">%(INPUT4)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -75,7 +75,7 @@
             <param name="outputUids">"data3" </param>
         </property>
         <property name="Mesh File">
-            <param name="location">%(Input5)</param>
+            <param name="location">%(INPUT5)</param>
             <param name="applyMatrixBeforeSaving">1</param>
             <param name="saveTexture">1</param>
             <param name="loadScaling">1</param>
@@ -159,7 +159,7 @@
             <param name="prepare">0</param>
             <param name="execute">1</param>
             <param name="inputUids">"data7" </param>
-            <param name="outputUids"></param>
+            <param name="outputUids">"data8"</param>
             <property name="SplineTransducer">
                 <param name="visible">1</param>
                 <param name="alwaysVisible">0</param>
@@ -204,12 +204,12 @@
             </property>
             <property name="FrameGeometry">
                 <param name="type">Convex</param>
-                <param name="offset">0 -28.7916248125399 </param>
+                <param name="offset">0 -38.7916248125399 </param>
                 <param name="isTopDown">1</param>
                 <param name="indicatorPosition">0</param>
                 <param name="coordinateSystem">1</param>
                 <param name="shortRadius">23.3358574029062</param>
-                <param name="longRadius">93.3358574029062</param>
+                <param name="longRadius">113.335857402906</param>
                 <param name="openingAngle">40</param>
             </property>
             <property name="AcousticParameters">
@@ -349,7 +349,7 @@
             </property>
 	</property>
 	<property name="ImFusionFile">
-            <param name="location">%(Output)</param>
+            <param name="location">%(OUTPUT1)</param>
             <param name="compressionMode">0</param>
             <param name="passes">1</param>
             <param name="dx">3</param>
