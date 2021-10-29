@@ -14,8 +14,9 @@ from scipy.spatial.distance import minkowski
 import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
-
-
+import utils
+from tqdm import tqdm
+import math
 # Part of the code is referred from: https://github.com/charlesq34/pointnet
 
 def download():
@@ -120,23 +121,24 @@ def augment_data(flow, pos1, pos2, raycasted):
     r2 = Rotation.from_euler(xyz, angle_target * np.pi / 180)
     R2 = r2.as_matrix()
     pos1_flow = np.zeros_like(pos1)
+    # print(pos1.shape)
     pos1_flow[:, :3] = pos1[:, :3] + flow
-    pos1_flow[:, 3:6] = pos1[:, 3:6] + flow
-    pos1_flow[:, 6] = pos1[:, 6]
+    # pos1_flow[:, 3:6] = pos1[:, 3:6] + flow
+    pos1_flow[:, 3] = pos1[:, 3]
     # rotation
     if to_augment > .5:
         pos1_centroid = centeroid_(pos1[:, :3])
-        color1_centroid = centeroid_(pos1[:, 3:6])
+        # color1_centroid = centeroid_(pos1[:, 3:6])
         pos1_flow_centroid = centeroid_(pos1_flow[:, :3])
-        color1_flow_centroid = centeroid_(pos1_flow[:, 3:6])
+        # color1_flow_centroid = centeroid_(pos1_flow[:, 3:6])
         pos2_centroid = centeroid_(pos2[:, :3])
-        color2_centroid = centeroid_(pos2[:, 3:6])
+        # color2_centroid = centeroid_(pos2[:, 3:6])
 
         pos1[:, :3] -= pos1_centroid
         pos2[:, :3] -= pos2_centroid
-        pos1[:, 3:6] -= color1_centroid
-        pos2[:, 3:6] -= color2_centroid
-        pos1_flow[:, 3:6] -= color1_flow_centroid
+        # pos1[:, 3:6] -= color1_centroid
+        # pos2[:, 3:6] -= color2_centroid
+        # pos1_flow[:, 3:6] -= color1_flow_centroid
         pos1_flow[:, :3] -= pos1_flow_centroid
         # rotate both source and target:
         # pos1[:, :3] = np.dot(pos1[:, :3], R)
@@ -147,15 +149,15 @@ def augment_data(flow, pos1, pos2, raycasted):
 
         # only target slightly rotated
         pos2[:, :3] = np.dot(pos2[:, :3], R2)
-        pos2[:, 3:6] = np.dot(pos2[:, 3:6], R2)
+        # pos2[:, 3:6] = np.dot(pos2[:, 3:6], R2)
         pos1_flow[:, :3] = np.dot(pos1_flow[:, :3], R2)
-        pos1_flow[:, 3:6] = np.dot(pos1_flow[:, 3:6], R2)
+        # pos1_flow[:, 3:6] = np.dot(pos1_flow[:, 3:6], R2)
 
         pos1[:, :3] += pos1_centroid
         pos2[:, :3] += pos2_centroid
-        pos1[:, 3:6] += color1_centroid
-        pos2[:, 3:6] += color2_centroid
-        pos1_flow[:, 3:6] += color1_flow_centroid
+        # pos1[:, 3:6] += color1_centroid
+        # pos2[:, 3:6] += color2_centroid
+        # pos1_flow[:, 3:6] += color1_flow_centroid
         pos1_flow[:, :3] += pos1_flow_centroid
         if raycasted == True:
             flow = pos1_flow[:, :3] - pos1[:, :3]
@@ -174,9 +176,9 @@ def augment_data(flow, pos1, pos2, raycasted):
             pos1_flow[indexes, 0] += sample_x[indexes]
             pos1_flow[indexes, 1] += sample_y[indexes]
             pos1_flow[indexes, 2] += sample_z[indexes]
-            pos1_flow[indexes, 3] += sample_x[indexes]
-            pos1_flow[indexes, 4] += sample_y[indexes]
-            pos1_flow[indexes, 5] += sample_z[indexes]
+            # pos1_flow[indexes, 3] += sample_x[indexes]
+            # pos1_flow[indexes, 4] += sample_y[indexes]
+            # pos1_flow[indexes, 5] += sample_z[indexes]
             flow = pos1_flow[:, :3] - pos1[:, :3]
         else:
             indexes = np.random.random(pos2.shape[0] // 3).astype(int)
@@ -195,7 +197,7 @@ def read_numpy_file(fp):
     pos1 = data["pc1"].astype('float32')
     pos2 = data["pc2"].astype('float32')
     flow = data["flow"].astype('float32')
-    constraint = data["cstPts"].astype('int')
+    constraint = data["ctsPts"].astype('int')
     return constraint, flow, pos1, pos2
 
 
@@ -206,16 +208,35 @@ def _get_spine_number(path: str):
         num = name.split('_')[1][5:]
     else:
         num = name.split('_')[0][5:]
-    # print(path, "  ", name, " ", num)
+    print(path, "  ", name, " ", num)
     try:
         return int(num)
     except:
         return -1
 
+def centeroidnp(arr):
+    """get the centroid of a point cloud"""
+    length = arr.shape[0]
+    sum_x = np.sum(arr[:, 0])
+    sum_y = np.sum(arr[:, 1])
+    sum_z = np.sum(arr[:, 2])
+    return math.ceil(sum_x/length), \
+            math.ceil(sum_y/length), \
+            math.ceil(sum_z/length)
 
+def create_7D(source_pc, source_center, target_center):
+    """create a 7D pointcloud as explained in Fu et al."""
+    v_s = np.zeros((len(source_pc), 7))
+    for i in range(len(v_s)):
+        v_ss = source_center - source_pc[i,:3]
+        v_st = target_center - source_pc[i,:3]
+        v_s[i,:3] = v_ss
+        v_s[i,3:6] = v_st
+        v_s[i,6] = source_pc[i,3]
+    return v_s
 class SceneflowDataset(Dataset):
-    def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted = False):
+    def __init__(self, npoints=4096, root='./jane/', mode="train",
+                 raycasted = True):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
@@ -231,29 +252,53 @@ class SceneflowDataset(Dataset):
         self.root = root
         self.raycasted = raycasted
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
-        train_spines = np.arange(1, 20)
-        val_spines = [21]
-        test_spines = [22]
+
+        train_spines = np.arange(1, 10)
+        val_spines = [11]
+        test_spines = [12]
         # train
-        if self.mode == "train":
-            self.data_path = [path for path in self.data_path if _get_spine_number(path) in train_spines]
-        # test
-        elif self.mode == "test":
-            self.data_path = [path for path in self.data_path if _get_spine_number(path) in test_spines]
-        # validation
-        elif self.mode == "validation":
-            self.data_path = [path for path in self.data_path if _get_spine_number(path) in val_spines]
-        else:
-            raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "validation"')
+        # if self.mode == "train":
+        #     self.data_path = [path for path in self.data_path if _get_spine_number(path) in train_spines]
+        # # test
+        # elif self.mode == "test":
+        #     self.data_path = [path for path in self.data_path if _get_spine_number(path) in test_spines]
+        # # validation
+        # elif self.mode == "validation":
+        #     self.data_path = [path for path in self.data_path if _get_spine_number(path) in val_spines]
+        # else:
+        #     raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "validation"')
+        # print(self.data_path)
 
     def __getitem__(self, index):
         fn = self.data_path[index]
+
         with open(fn, 'rb') as fp:
             constraint, flow, pos1, pos2 = read_numpy_file(fp)
-
+            print(constraint)
             # augmentation
             if self.mode == "train":
                 flow, pos1, pos2 = augment_data(flow, pos1, pos2, raycasted=self.raycasted)
+            pos1_ = pos1
+            pos2_ = pos2
+            flow_ = flow
+            raycasted_source = pos1
+            raycasted_target = pos2
+            raycasted_source_flow = np.zeros_like(raycasted_source)
+            raycasted_source_flow[:, :3] = raycasted_source[:, :3] + flow
+            raycasted_source_flow[:, 3] = raycasted_source[:, 3]
+
+            # prepare data into 7D
+            centroid_source = centeroidnp(raycasted_source)
+            centroid_target = centeroidnp(raycasted_target)
+            centroid_source_flow = centeroidnp(raycasted_source_flow)
+
+            source_7d = create_7D(raycasted_source, centroid_source, centroid_source_flow)
+            target_7d = create_7D(raycasted_target, centroid_source, centroid_target)
+            flow_source_7d = create_7D(raycasted_source_flow, centroid_source, centroid_source_flow)
+
+            flow = flow_source_7d[:, :3] - source_7d[:, :3]
+            pos1 = source_7d
+            pos2 = target_7d
 
         np.random.seed(100)
         if self.raycasted == False:
@@ -279,14 +324,15 @@ class SceneflowDataset(Dataset):
 
         for i in range(len(constraint) // 8):
             points_to_delete.extend(np.array(points_to_delete) + 2 * i)
-            constraint_points.extend([L1[constraint[0 + i], ...],
-                                      L2[constraint[1 + i], ...],
-                                      L2[constraint[2 + i], ...],
-                                      L3[constraint[3 + i], ...],
-                                      L3[constraint[4 + i], ...],
-                                      L4[constraint[5 + i], ...],
-                                      L4[constraint[6 + i], ...],
-                                      L5[constraint[7 + i], ...]])
+
+            # constraint_points.extend([L1[constraint[0 + i], ...],
+            #                           L2[constraint[1 + i], ...],
+            #                           L2[constraint[2 + i], ...],
+            #                           L3[constraint[3 + i], ...],
+            #                           L3[constraint[4 + i], ...],
+            #                           L4[constraint[5 + i], ...],
+            #                           L4[constraint[6 + i], ...],
+            #                           L5[constraint[7 + i], ...]])
         sample_idx_source = np.delete(sample_idx_source, points_to_delete)
         # add the constraint points
         sample_idx_source = np.concatenate((sample_idx_source, constraint_points), axis=0).astype(int)
@@ -367,49 +413,20 @@ class SceneflowDataset(Dataset):
     def __len__(self):
         return len(self.data_path)
 
-
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
 if __name__ == '__main__':
-    # train = SceneflowDataset(1024)
-    # test = SceneflowDataset(1024, 'test')
-    # for data in train:
-    #     print(data[0].shape)
-    #     break
-    # import mayavi.mlab as mlab
+    args = {"exp_name": "flownet3d", "emb_dims": 512, "num_points": 4096,
+            "lr": 0.001, "momentum": 0.9, "seed": 100, "dropout": 0.5,
+            "batch_size": 8, "test_batch_size": 8, "epochs": 50,
+            "use_sgd": False, "eval": False, "cycle": False,
+            "gaussian_noise": False, "loss": "chamfer"}
+    args = dotdict(args)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root= "./jane/", raycasted=True)
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
 
-    dataset = SceneflowDataset(npoints=4096)
-    data_loader = DataLoader(dataset, batch_size=2)
-    # print(len(d))
-    import time
-
-    tic = time.time()
-    for i, data in enumerate(data_loader):
-        pc1, pc2, col1, col2, flow, mask, surface1, surface2 = data
-        # print(surface1)
-        # print(surface2)
-        # position1 = np.where(surface1 == 1)[0]
-        # ind1 = torch.tensor(position1).cuda()
-        # position2 = np.where(surface2 == 1)[0]
-        # ind2 = torch.tensor(position2).cuda()
-        # print(pc1.shape)
-        # pc1 = torch.tensor(pc1).cuda().transpose(2, 1).contiguous()
-        # pc2 = torch.tensor(pc2).cuda().transpose(2, 1).contiguous()
-        # a = torch.index_select(pc1, 2, ind1).cuda()
-        # b = torch.index_select(pc2, 2, ind2).cuda()
-        # print(a.shape, b.shape, flow.shape)
-        print(pc1.shape, flow.shape)
-        break
-
-        # mlab.figure(bgcolor=(1, 1, 1))
-        # mlab.points3d(pc1[:, 0], pc1[:, 1], pc1[:, 2], scale_factor=0.05, color=(1, 0, 0))
-        # mlab.points3d(pc2[:, 0], pc2[:, 1], pc2[:, 2], scale_factor=0.05, color=(0, 1, 0))
-        # input()
-        #
-        # mlab.figure(bgcolor=(1, 1, 1))
-        # mlab.points3d(pc1[:, 0], pc1[:, 1], pc1[:, 2], scale_factor=0.05, color=(1, 0, 0))
-        # mlab.points3d(pc2[:, 0], pc2[:, 1], pc2[:, 2], scale_factor=0.05, color=(0, 1, 0))
-        # mlab.quiver3d(pc1[:, 0], pc1[:, 1], pc1[:, 2], flow[:, 0], flow[:, 1], flow[:, 2], scale_factor=1,
-        #               color=(0, 0, 1), line_width=0.2)
-        # input()
-
-    print(time.time() - tic)
-    print(pc1.shape, type(pc1))
+    for i, data in tqdm(enumerate(train_loader), total=len(train_loader)):
+        color1, color2, constraint, flow, pc1, pc2, position1, fn = utils.read_batch_data(data)
