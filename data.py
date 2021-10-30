@@ -174,6 +174,7 @@ def _get_spine_number(path: str):
     name = os.path.split(path)[-1]
     name = name.split("ts")[0]
     name = name.replace("raycasted", "")
+    name = name.replace("full", "")
     name = name.replace("spine", "")
     name = name.replace("_", "")
     # if "raycasted" in name:
