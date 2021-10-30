@@ -249,13 +249,28 @@ class BoneSegmentation(pl.LightningModule):
             label = labels[i]
             image = images[i]
 
-            pred_filepath = os.path.join(savepath, filename.split(".")[0] + "_pred.npy")
+            spine_id = filename.split("_")[0]
+
+            # spine10_ts_1_0_.png -> 1_0_.png; spine10_ts_1_0_005.png -> 1_0_005.png
+            ts_img_id = filename.split("ts_")[-1]
+
+            # 1_0_.png -> .png;spine10_ts_1_0_005.png -> 005.png
+            img_id = ts_img_id.split("_")[-1]
+
+            # 1_0_.png > 1_0; 1_0_005.png -> 1_0
+            ts = ts_img_id.replace("_" + img_id, "")
+
+            save_folder = os.path.join(savepath, spine_id, ts)
+            if not os.path.exists(save_folder):
+                os.makedirs(save_folder)
+
+            pred_filepath = os.path.join(save_folder, filename.split(".")[0] + "_pred.npy")
             np.save(pred_filepath, prediction)
 
-            image_filepath = os.path.join(savepath, filename.split(".")[0] + "_image.npy")
+            image_filepath = os.path.join(save_folder, filename.split(".")[0] + "_image.npy")
             np.save(image_filepath, image)
 
-            label_filepath = os.path.join(savepath, filename.split(".")[0] + "_gt.npy")
+            label_filepath = os.path.join(save_folder, filename.split(".")[0] + "_gt.npy")
             np.save(label_filepath, label)
 
     @staticmethod

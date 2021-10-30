@@ -255,6 +255,9 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
     source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name, tre_points\
         = data_batch
     constrain_pairs = get_connected_idxes(constraint)
+    for i, item in enumerate(constrain_pairs):
+        save_data(data_dict={'constraint_' + str(i): source_pc[item, ...]},
+                  save_path=os.path.join(save_path, file_name))
 
     # Preprocessing and saving unprocessed data
     vertebra_dict = preprocess_input(source_pc, gt_flow, position1, constrain_pairs, tre_points)
@@ -311,14 +314,14 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
 
         # 2.h Saving data after second iteration
         print(os.path.join(save_path, file_name))
-        save_data(data_dict={'source' + "_v" + str(i): original_source_vertebra,
-                             'tre_points' + "_v" + str(i): vertebra_dict[i]['tre_points'],
+        save_data(data_dict={'source_v' + str(i): original_source_vertebra,
+                             'tre_points_v' + str(i): vertebra_dict[i]['tre_points'],
                              'target': target_pc,
-                             'gt_flow' + "_v" + str(i): vertebra_dict[i]['gt_flow'],
-                             'predicted_pc' + "_v" + str(i): predicted_pc,
-                             'predicted_gt' + "_v" + str(i): predicted_gt,
-                             'moved_source' + "_v" + str(i): source_pc_it2,  # sanity check
-                             'predicted_T' + "_v" + str(i): overall_T
+                             'gt_flow_v' + str(i): vertebra_dict[i]['gt_flow'],
+                             'predicted_pc_v' + str(i): predicted_pc,
+                             'predicted_gt_v' + str(i): predicted_gt,
+                             'moved_source_v'+ str(i): source_pc_it2,  # sanity check
+                             'predicted_T_v' + str(i): overall_T,
                              },
                   save_path=os.path.join(save_path, file_name))
 
@@ -342,11 +345,11 @@ def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
 
     results = []
     for i, data in enumerate(test_set):
-        if i > 2:
-            continue
-        results.append(run_cpd(data_batch = data,
-                               save_path = save_path,
-                               cpd_iterations = cpd_iterations,
+        # if i > 2:
+        #     continue
+        results.append(run_cpd(data_batch=data,
+                               save_path=save_path,
+                               cpd_iterations=cpd_iterations,
                                plot_iterations=False))
 
     results = append_avg_metrics(results)
@@ -361,7 +364,8 @@ def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
-    parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
+    #parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
+    parser.add_argument('--dataset_path', type=str, default="E:/NAS/jane_project/npz_data_raycasted")
     parser.add_argument('--wandb-key', type=str, required=True)
     parser.add_argument('--cpd-iterations', type=int, default=100)
     parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")

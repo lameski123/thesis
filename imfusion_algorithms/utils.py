@@ -122,11 +122,6 @@ def get_grid_indexes(grid_size):
     return np.array(indexes_list)
 
 
-
-
-
-
-
 def volume2slices(volume, T_vol2world, vol_spacing, image_size, img_spacing, T_img2world):
 
     vol_colored = np.zeros(volume.shape)
@@ -183,7 +178,6 @@ def volume2slices(volume, T_vol2world, vol_spacing, image_size, img_spacing, T_i
         images_list.append(image)
 
     return images_list, vol_colored
-
 
 
 def main():
