@@ -32,6 +32,10 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
     :param: estimated_flow: np.ndarray() with size [n_batches, 3, n_points] containing the estimated flow
     """
 
+    #todo this is a fix not to make code crash - todo is adding tre points also for validation data
+    if tre_points is None:
+        tre_points = np.ones((source_pc.shape[0], 2, 4))*-1
+
     source_pc, source_color, gt_flow, estimated_flow, tre_points = \
         tensor2numpy(source_pc, source_color, gt_flow, estimated_flow, tre_points)
 
@@ -52,7 +56,7 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
             source=np.transpose(source_pc[i, ...]),
             gt_flow=np.transpose(gt_flow[i, ...]),
             predicted_flow=np.transpose(estimated_flow[i, ...]),
-            tre_points=tre_points[i, ...])
+            tre_points=tre_points[i, ...] )
 
         metric_dict_list.append({
             "id": file_id,
@@ -144,7 +148,13 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
 
     test_metrics = []
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
-        color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = utils.read_batch_data(data)
+
+        batch_data = utils.read_batch_data(data)
+        if len(batch_data) == 10:
+            color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
+        else:
+            color1, color2, constraint, flow, pc1, pc2, position1, fn = batch_data
+            tre_points = None
         source_color = get_color_array(position1)
 
         batch_size = pc1.size(0)

@@ -97,7 +97,7 @@ def run_experiment(args):
     net.apply(utils.weights_init)
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
-    val_set = SceneflowDataset(npoints=4096, mode="validation", root=args.dataset_path,
+    val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
                                raycasted=args.use_raycasted_data)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
     if torch.cuda.device_count() > 1:
