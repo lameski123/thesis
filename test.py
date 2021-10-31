@@ -150,7 +150,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
 
         batch_data = utils.read_batch_data(data)
-        if len(batch_data) == 10:
+        if len(batch_data) == 9:
             color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
         else:
             color1, color2, constraint, flow, pc1, pc2, position1, fn = batch_data
