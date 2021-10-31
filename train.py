@@ -125,12 +125,13 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
+    wandb.login(key=args.wandb_key)
+
     if args.wandb_sweep_id is not None:
         wandb.agent(args.wandb_sweep_id, train_wandb, count=args.wandb_sweep_count, project='spine_flownet')
     else:
         args = utils.update_args(args)
 
-        wandb.login(key=args.wandb_key)
         wandb.init(project='spine_flownet', config=args)
 
         run_experiment(args)
