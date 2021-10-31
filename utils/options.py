@@ -33,6 +33,7 @@ def create_parser():
                              'or leave it empty only for flow loss')
     parser.add_argument('--loss_coeff', nargs='+', default=[],
                         help='list of coefficients for each loss, in the same order as the loss')
+    parser.add_argument('--gpu_id', type=int, default=-1, metavar='S', help='GPU id (default: -1)')
     parser.add_argument('--wandb_key', type=str, required=True, help='key to login to your wandb account')
     parser.add_argument('--wandb_sweep_id', type=str, default=None, help='sweep id for wandb')
     parser.add_argument('--wandb_sweep_count', type=int, default=10, help='number of times sweeping the HP range')
