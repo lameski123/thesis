@@ -1,29 +1,26 @@
 from data import SceneflowDataset
 import argparse
 import numpy as np
+import os
 
 
-def check_data(data_batch):
-    source_pc, target_pc, _, _, gt_flow, _, constraint, position1, _ = data_batch
+def main(dataset_path, save_dir):
+    test_set = SceneflowDataset(mode="test", root=dataset_path, raycasted=True)
 
-    np.savetxt("source_pc.txt", source_pc)
-    np.savetxt("target_pc.txt", target_pc)
+    results = []
+    for i, data in enumerate(test_set):
+        source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name, tre_points \
+            = data
 
-    print("done saving")
+        save_folder = os.path.join(save_dir, file_name)
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+
+        np.savetxt(os.path.join(save_folder, "source_pc.txt"), source_pc[:, 0:3])
+        np.savetxt(os.path.join(save_folder, "target_pc.txt"), target_pc[:, 0:3])
+        np.savetxt(os.path.join(save_folder, "tre_points.txt"), tre_points[:, 0:3])
+        np.savetxt(os.path.join(save_folder, "constraints.txt"), source_pc[constraint, 0:3])
 
 
-def main(dataset_path):
-    test_set = SceneflowDataset(npoints=4096, train=True, root=dataset_path)
-
-    for data in test_set:
-        check_data(data)
-        return
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Data generation testing')
-    parser.add_argument('--dataset_path', type=str, default="../tmpDb")
-
-    args = parser.parse_args()
-
-    main(args.dataset_path)
+main(dataset_path="E:/NAS/jane_project/flownet_data/nas_data/new_data_raycasted",
+     save_dir="C:/Users/maria/OneDrive/Desktop/data_check")

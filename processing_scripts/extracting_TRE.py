@@ -71,7 +71,7 @@ def parse_points_list(imfusion_points_list):
     return colored_points
 
 
-def write_poses_output(ws_filepath: str, output_filepath: str, centroid):
+def write_poses_output(ws_filepath: str, output_filepath: str):
 
     tree = ET.parse(ws_filepath)
     root = tree.getroot()
@@ -82,31 +82,14 @@ def write_poses_output(ws_filepath: str, output_filepath: str, centroid):
 
     # saving the label points as in a list
     tre_points = np.array(tre_points)
-    tre_points[:, 0:3] = centroid -  tre_points[:, 0:3]
+
+    print("\n")
+    print(tre_points)
 
     np.savetxt(fname=output_filepath, X=tre_points)
 
 
-#prepare data set
-def centeroidnp(arr):
-    """get the centroid of a point cloud"""
-    length = arr.shape[0]
-    sum_x = np.sum(arr[:, 0])
-    sum_y = np.sum(arr[:, 1])
-    sum_z = np.sum(arr[:, 2])
-    return math.ceil(sum_x/length), \
-            math.ceil(sum_y/length), \
-            math.ceil(sum_z/length)
-
-
-def get_source_centroid(spine_path, spine_id):
-    source_vertebrae = [np.loadtxt(os.path.join(spine_path,  spine_id + "_vert" + str(i) + "0.txt")) for i in range(1, 6)]
-    source_pc = np.concatenate(source_vertebrae, axis=0)
-    centroid = centeroidnp(source_pc)
-    return centroid
-
-
-def generate_tre_files(input_obj_dir, input_txt_dir, output_dir):
+def generate_tre_files(input_obj_dir, output_dir):
     spine_list = [item for item in os.listdir(input_obj_dir) if "spine" in item]
 
     for spine_id in spine_list:
@@ -120,17 +103,10 @@ def generate_tre_files(input_obj_dir, input_txt_dir, output_dir):
 
         output_path = os.path.join(output_dir, spine_id + "_facet_targets.txt")
 
-        source_pc_path = os.path.join(input_txt_dir, spine_id, "ts0")
-        centroid = get_source_centroid(source_pc_path, spine_id)
-
-        print(spine_id, centroid)
-
         write_poses_output(ws_filepath=input_ws_path,
-                           output_filepath=output_path,
-                           centroid=centroid
+                           output_filepath=output_path
                            )
 
 
-generate_tre_files(input_obj_dir = "E:/NAS/jane_project/obj_files",
-                   output_dir = "E:/NAS/jane_project/tmp_db",
-                   input_txt_dir="E:/NAS/jane_project/txt_files")
+generate_tre_files(input_obj_dir="E:/NAS/jane_project/obj_files",
+                   output_dir="E:/NAS/jane_project/flownet_data/nas_data/new_data_raycasted")
