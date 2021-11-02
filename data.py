@@ -116,7 +116,7 @@ def apply_random_rotation(pc, rotation_center=np.array([0, 0, 0]), r=None):
     return rotated_pc + rotation_center
 
 
-def augment_data(flow, pc1, pc2, augmentation_prob=0.5):
+def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
     augmented_pc1 = np.zeros(pc1.shape)
     augmented_pc2 = np.zeros(pc2.shape)
@@ -137,6 +137,7 @@ def augment_data(flow, pc1, pc2, augmentation_prob=0.5):
     if np.random.random() < augmentation_prob:
         # rotate the source about its centroid randomly and update flow accordingly
         pc1 = apply_random_rotation(pc1, rotation_center=np.mean(pc1, axis=0))
+        tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], rotation_center=np.mean(pc1, axis=0))
 
     # rotate the target with a probability 0.5
     if np.random.random() < augmentation_prob:
@@ -388,8 +389,8 @@ class SceneflowDataset(Dataset):
 
         # augmentation in train
         if self.mode == "train" and self.augment:
-            downsampled_flow, downsampled_source_pc, downsampled_target_pc = \
-                augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, augmentation_prob=1)
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = augment_data(
+                downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points, augmentation_prob=1)
 
         # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
         # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
@@ -421,8 +422,8 @@ class SceneflowDataset(Dataset):
             return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
                    vertebrae_point_inx_src, [], file_id
 
-        # Getting the tre points for test - this are the 3d coordinates of the target points for tre computation
-        tre_points = self.get_tre_points(self.data_path[index])
+        # # Getting the tre points for test - this are the 3d coordinates of the target points for tre computation
+        # tre_points = self.get_tre_points(self.data_path[index])
 
         return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
                vertebrae_point_inx_src, [], file_id, tre_points
