@@ -5,7 +5,7 @@ import os
 
 
 def main(dataset_path, save_dir):
-    test_set = SceneflowDataset(mode="test", root=dataset_path, raycasted=True)
+    test_set = SceneflowDataset(mode="train", root=dataset_path, raycasted=True)
 
     results = []
     for i, data in enumerate(test_set):
@@ -18,6 +18,7 @@ def main(dataset_path, save_dir):
 
         np.savetxt(os.path.join(save_folder, "source_pc.txt"), source_pc[:, 0:3])
         np.savetxt(os.path.join(save_folder, "target_pc.txt"), target_pc[:, 0:3])
+        np.savetxt(os.path.join(save_folder, "gt_predicted.txt"), source_pc[:, 0:3] + gt_flow)
         np.savetxt(os.path.join(save_folder, "tre_points.txt"), tre_points[:, 0:3])
         np.savetxt(os.path.join(save_folder, "constraints.txt"), source_pc[constraint, 0:3])
 

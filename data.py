@@ -442,7 +442,7 @@ class SceneflowDataset(Dataset):
         tre_points = self.get_tre_points(self.data_path[index])
 
         # augmentation in train
-        if self.mode == "train":
+        if self.mode == "train" and self.augment:
             downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
                 augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points,
                              augmentation_prob=0.5)
@@ -455,9 +455,6 @@ class SceneflowDataset(Dataset):
                              tre_points=tre_points,
                              rotation=self.test_rotation_degree,
                              axis=self.test_rotation_axis)
-        if self.mode == "train" and self.augment:
-            downsampled_flow, downsampled_source_pc, downsampled_target_pc = \
-                augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, augmentation_prob=1)
 
         # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
         # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
