@@ -150,7 +150,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
 
         batch_data = utils.read_batch_data(data)
-        if len(batch_data) == 10:
+        if len(batch_data) == 9:
             color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
         else:
             color1, color2, constraint, flow, pc1, pc2, position1, fn = batch_data
@@ -167,15 +167,16 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
                                                                                        source_color=source_color,
                                                                                        gt_flow=flow,
                                                                                        estimated_flow=flow_pred,
-                                                                                       tre_points = tre_points)
-        test_metrics.extend(metrics)
-        # Adding the network losses to the losses list of dicts
-        for item in test_metrics:
+                                                                                       tre_points=tre_points)
+        for item in metrics:
             item["mse loss"] = mse_loss.item()
             item["biomechanical loss"] = bio_loss.item()
             item["rigidity loss"] = rig_loss.item()
             item["Chamfer loss"] = chamfer_loss.item()
-            
+
+        test_metrics.extend(metrics)
+        # Adding the network losses to the losses list of dicts
+
         mse_loss_total += mse_loss.item() / len(test_loader)
         bio_loss_total += bio_loss.item() / len(test_loader)
         rig_loss_total += rig_loss.item() / len(test_loader)
@@ -254,7 +255,8 @@ def main():
 
 def test(args, net, textio):
 
-    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path, raycasted=args.use_raycasted_data)
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path,
+                                raycasted=args.use_raycasted_data, data_seed=args.data_seed)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
@@ -265,6 +267,8 @@ def test(args, net, textio):
 
     with torch.no_grad():
         test_loss = test_one_epoch(net, test_loader, args=args, save_results=True, wandb_table=test_table)
+
+    wandb.log({'test_loss': test_loss['TRE']})
 
     textio.cprint('==FINAL TEST==')
     textio.cprint(f'mean test loss: {test_loss}')

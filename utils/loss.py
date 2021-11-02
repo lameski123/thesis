@@ -16,12 +16,15 @@ def calculate_loss(batch_size, constraint, flow, flow_pred, loss_opt, pc1, pc2, 
         for idx in range(batch_size):
             bio_loss += biomechanical_loss(constraint, flow, flow_pred, idx, pc1, coeff=loss_coeff["biomechanical"])
         loss += bio_loss
+        bio_loss /= loss_coeff["biomechanical"]
     if "rigidity" in loss_opt or 'all' in loss_opt:
         rig_loss = rigidity_loss(flow, flow_pred, pc1, position1, coeff=loss_coeff["rigidity"])
         loss += rig_loss
+        rig_loss /= loss_coeff["rigidity"]
     if "chamfer" in loss_opt or 'all' in loss_opt:
         cham_loss = chamfer_loss(flow, flow_pred, pc1, pc2, coeff=loss_coeff["chamfer"])
         loss += cham_loss
+        cham_loss /= loss_coeff["chamfer"]
     return bio_loss, cham_loss, loss, mse_loss, rig_loss
 
 

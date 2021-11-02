@@ -46,7 +46,7 @@ def train(args, net, train_loader, val_loader, textio):
         if best_test_loss >= test_loss:
             best_test_loss = test_loss
             textio.cprint('best test loss till now: %f' % test_loss)
-            if torch.cuda.device_count() > 1:
+            if torch.cuda.device_count() > 1 and args.gpu_id == -1:
                 torch.save(net.module.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
             else:
                 torch.save(net.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
@@ -93,14 +93,17 @@ def run_experiment(args):
     utils.create_paths(args)
     textio = utils.IOStream(os.path.join(args.checkpoints_dir, 'run.log'))
     textio.cprint(str(args))
+    if args.gpu_id != -1:
+        torch.cuda.set_device(args.gpu_id)
     net = FlowNet3D(args).cuda()
     net.apply(utils.weights_init)
-    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
+                                 raycasted=args.use_raycasted_data, augment=not args.no_augmentation, data_seed=args.data_seed)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
     val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
-                               raycasted=args.use_raycasted_data)
+                               raycasted=args.use_raycasted_data, data_seed=args.data_seed)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 and args.gpu_id == -1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
     train(args, net, train_loader, val_loader, textio)
@@ -125,12 +128,13 @@ def main():
     parser = utils.create_parser()
     args = parser.parse_args()
 
+    wandb.login(key=args.wandb_key)
+
     if args.wandb_sweep_id is not None:
         wandb.agent(args.wandb_sweep_id, train_wandb, count=args.wandb_sweep_count, project='spine_flownet')
     else:
         args = utils.update_args(args)
 
-        wandb.login(key=args.wandb_key)
         wandb.init(project='spine_flownet', config=args)
 
         run_experiment(args)

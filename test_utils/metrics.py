@@ -152,7 +152,7 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow, tre_points=None):
         gt_registered_target = np.matmul(gt_T, vertebra_target)  # Nx4
         predicted_registered_target = np.matmul(predicted_T, vertebra_target)  # Nx4
         tre_error = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=0)
-        tre_list.append(tre_error)
+        tre_list.append(np.mean(tre_error))
 
     return quaternion_distance_list, translation_distance_list, tre_list
 

@@ -229,12 +229,15 @@ def _get_spine_number(path: str):
 
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted = False, **kwargs):
+                 raycasted = False, augment=True, data_seed=0, **kwargs):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
         :param mode: mode can be any of the "train", "test" and "validation"
         :param raycasted: the data used is raycasted or full vertebras
+        :param raycasted: the data used is raycasted or full vertebrae
+        :param augment: if augment data for training
+        :param data_seed: which permutation to use for slicing the dataset
         """
 
         if mode not in ["train", "val", "test"]:
@@ -244,10 +247,13 @@ class SceneflowDataset(Dataset):
         self.mode = mode
         self.root = root
         self.raycasted = raycasted
+        self.augment = augment
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
         self.use_target_normalization_as_feature = True
         self.spine_splits = {"train": np.arange(1, 20), "val": [21], "test": [22]}
         # self.spine_splits = {"train": np.arange(1, 22), "val": [21], "test": np.arange(1, 22)}
+        train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed, )
+        self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
 
         if "augment_test" in kwargs.keys():
@@ -265,6 +271,19 @@ class SceneflowDataset(Dataset):
         # else:
 
         # train
+
+    def _get_sets_indices(self, seed: int, num_spines=22):
+        assert seed >= 0 and seed < 5, 'we have only 5 different sets for indices'
+        indices = np.asarray([[10, 9, 0, 8, 3, 14, 2, 5, 12, 16, 15, 6, 1, 17, 13, 18, 7, 4, 11, 19, 20, 21],
+                              [10, 2, 15, 19, 14, 6, 0, 7, 5, 18, 1, 9, 11, 12, 20, 16, 4, 3, 8, 17, 13, 21],
+                              [13, 19, 15, 5, 0, 12, 11, 8, 3, 10, 1, 14, 9, 6, 4, 17, 7, 18, 16, 2, 20, 21],
+                              [4, 11, 6, 10, 20, 13, 0, 12, 15, 14, 16, 9, 7, 2, 17, 3, 5, 8, 18, 1, 19, 21],
+                              [9, 7, 15, 20, 17, 4, 10, 3, 0, 19, 1, 11, 14, 6, 13, 18, 16, 8, 12, 2, 5, 21]])
+        indices += 1
+
+        # np.random.seed(seed)
+        # indices = np.random.permutation(num_spines)
+        return indices[seed, :-3], indices[seed, -3:-1], indices[seed, -1:]
 
     def get_tre_points(self, filename):
         """
@@ -338,11 +357,11 @@ class SceneflowDataset(Dataset):
         # points which will be deleted from the source point indexes to make space for the constraints
 
         # 2.a) Removing K points from the point cloud, with K = N constraints
-        pc_lengths = [item.size for item in [sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5] ]
-        pc_idx_centers = [np.sum(pc_lengths[0:i+1]) - pc_lengths[i]//2 for i in range(5)]
+        pc_lengths = [item.size for item in [sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5]]
+        pc_idx_centers = [np.sum(pc_lengths[0:i + 1]) - pc_lengths[i] // 2 for i in range(5)]
         constraints_per_vertebra = [len(np.where(pc[constraints, -1] == i)[0]) for i in range(1, 6)]
         delete_list = list(chain(*[range(center, center + item)
-                              for (center, item) in zip(pc_idx_centers, constraints_per_vertebra)]))
+                                   for (center, item) in zip(pc_idx_centers, constraints_per_vertebra)]))
         sample_idx_ = np.delete(sample_idx_, delete_list)
 
         # 2.b) Adding the constraints points indexes in the end.
@@ -436,6 +455,9 @@ class SceneflowDataset(Dataset):
                              tre_points=tre_points,
                              rotation=self.test_rotation_degree,
                              axis=self.test_rotation_axis)
+        if self.mode == "train" and self.augment:
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc = \
+                augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, augmentation_prob=1)
 
         # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
         # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
@@ -465,10 +487,10 @@ class SceneflowDataset(Dataset):
         # If mode is test also evaluate the tre
         if self.mode != "test":
             return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-               vertebrae_point_inx_src, [], file_id
+                   vertebrae_point_inx_src, [], file_id
 
         return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-            vertebrae_point_inx_src, [], file_id, tre_points
+               vertebrae_point_inx_src, [], file_id, tre_points
 
     def sample_vertebrae(self, pos1):
 
@@ -491,7 +513,6 @@ class SceneflowDataset(Dataset):
 
     def __len__(self):
         return len(self.data_path)
-
 
 # if __name__ == '__main__':
 #     # train = SceneflowDataset(1024)
