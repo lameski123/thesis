@@ -136,8 +136,9 @@ def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     # rotate the source with a probability 0.5
     if np.random.random() < augmentation_prob:
         # rotate the source about its centroid randomly and update flow accordingly
-        pc1 = apply_random_rotation(pc1, rotation_center=np.mean(pc1, axis=0))
-        tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], rotation_center=np.mean(pc1, axis=0))
+        r = get_random_rotation()
+        pc1 = apply_random_rotation(pc1, r=r, rotation_center=np.mean(pc1, axis=0))
+        tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], r=r, rotation_center=np.mean(pc1, axis=0))
 
     # rotate the target with a probability 0.5
     if np.random.random() < augmentation_prob:
