@@ -153,8 +153,7 @@ def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
     return flow, augmented_pc1, augmented_pc2, tre_points
 
 
-def augment_data(flow, pc1, pc2, tre_points=None, augmentation_prob=0.5):
-
+def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
     augmented_pc1 = np.zeros(pc1.shape)
     augmented_pc2 = np.zeros(pc2.shape)
@@ -464,6 +463,11 @@ class SceneflowDataset(Dataset):
                                 target_pc=downsampled_target_pc[..., :3],
                                 tre_points=tre_points)
 
+        # augmentation in train
+        if self.mode == "train" and self.augment:
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = augment_data(
+                downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points, augmentation_prob=1)
+
         if self.use_target_normalization_as_feature:
             pc1 = normalized_source_pc[..., :3]
             pc2 = normalized_target_pc[..., :3]
@@ -481,10 +485,13 @@ class SceneflowDataset(Dataset):
 
         mask = np.ones([self.npoints])
 
-        # If mode is test also evaluate the tre
-        if self.mode != "test":
-            return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-                   vertebrae_point_inx_src, [], file_id
+        # # If mode is test also evaluate the tre
+        # if self.mode != "test":
+        #     return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
+        #            vertebrae_point_inx_src, [], file_id
+
+        # # Getting the tre points for test - this are the 3d coordinates of the target points for tre computation
+        # tre_points = self.get_tre_points(self.data_path[index])
 
         return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
                vertebrae_point_inx_src, [], file_id, tre_points

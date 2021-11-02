@@ -3,6 +3,7 @@
 
 from __future__ import print_function
 
+import copy
 import os
 from types import SimpleNamespace
 
@@ -19,7 +20,7 @@ from tqdm import tqdm
 import utils
 from data import SceneflowDataset
 from model import FlowNet3D
-from test import test_one_epoch, test
+from test import test_one_epoch, test, compute_test_metrics, get_color_array
 
 args = None
 
@@ -34,6 +35,7 @@ def train(args, net, train_loader, val_loader, textio):
     scheduler = StepLR(opt, 10, gamma=0.7)
 
     best_test_loss = np.inf
+    best_net = None
     for epoch in range(args.epochs):
         textio.cprint('==epoch: %d, learning rate: %f==' % (epoch, opt.param_groups[0]['lr']))
         train_losses = train_one_epoch(net, train_loader, opt, args.loss, args)
@@ -41,10 +43,11 @@ def train(args, net, train_loader, val_loader, textio):
 
         with torch.no_grad():
             test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
-        test_loss = test_losses['total_loss']
+        test_loss = test_losses['TRE']
         textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
             best_test_loss = test_loss
+            best_net = copy.deepcopy(net)
             textio.cprint('best test loss till now: %f' % test_loss)
             if torch.cuda.device_count() > 1 and args.gpu_id == -1:
                 torch.save(net.module.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
@@ -55,25 +58,40 @@ def train(args, net, train_loader, val_loader, textio):
         wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses[args.sweep_target_loss]})
 
         args.lr = scheduler.get_last_lr()[0]
+    return best_net
 
 
 def train_one_epoch(net, train_loader, opt, loss_opt, args):
     net.train()
     total_loss = 0
-    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total = 0.0, 0.0, 0.0, 0.0
+    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
     for i, data in tqdm(enumerate(train_loader), total=len(train_loader)):
-        color1, color2, constraint, flow, pc1, pc2, position1, fn = utils.read_batch_data(data)
+        batch_data = utils.read_batch_data(data)
+        if len(batch_data) == 9:
+            color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
+        else:
+            color1, color2, constraint, flow, pc1, pc2, position1, fn = batch_data
+            tre_points = None
+        source_color = get_color_array(position1)
         batch_size = pc1.size(0)
         opt.zero_grad()
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
                                                                                 loss_opt, pc1, pc2, position1,
                                                                                 args.loss_coeff)
+        metrics, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
+                                                                                       source_pc=pc1,
+                                                                                       source_color=source_color,
+                                                                                       gt_flow=flow,
+                                                                                       estimated_flow=flow_pred.detach(),
+                                                                                       tre_points=tre_points)
+
         mse_loss_total += mse_loss.item() / len(train_loader)
         bio_loss_total += bio_loss.item() / len(train_loader)
         rig_loss_total += rig_loss.item() / len(train_loader)
         chamfer_loss_total += chamfer_loss.item() / len(train_loader)
         total_loss += loss.item() / len(train_loader)
+        tre_total += tre / len(train_loader)
 
         loss.backward()
         opt.step()
@@ -81,7 +99,7 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
             utils.plot_pointcloud(flow_pred, pc1, pc2)
 
     losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
-              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total}
+              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total, 'TRE': tre_total}
     return losses
 
 
@@ -106,9 +124,9 @@ def run_experiment(args):
     if torch.cuda.device_count() > 1 and args.gpu_id == -1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
-    train(args, net, train_loader, val_loader, textio)
+    best_net = train(args, net, train_loader, val_loader, textio)
     # test after training
-    test(args, net, textio)
+    test(args, best_net, textio)
 
 
 def train_wandb():

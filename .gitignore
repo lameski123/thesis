@@ -20,3 +20,4 @@ spine1/
 spine10/ts_1_0/full_gt_pc.txt
 database/
 bone_segmentation_utils/data.zip
+*.DS_store
