@@ -158,7 +158,7 @@ def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     augmented_pc1[:, 0:3] = pc1
     augmented_pc2[:, 0:3] = pc2
 
-    return flow, augmented_pc1, augmented_pc2
+    return flow, augmented_pc1, augmented_pc2, tre_points
 
 
 def read_numpy_file(fp):
@@ -388,10 +388,6 @@ class SceneflowDataset(Dataset):
         downsampled_target_pc = target_pc[sample_idx_target, ...]
         downsampled_flow = flow[sample_idx_source, :]
 
-        # augmentation in train
-        if self.mode == "train" and self.augment:
-            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = augment_data(
-                downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points, augmentation_prob=1)
 
         # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
         # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
@@ -399,7 +395,12 @@ class SceneflowDataset(Dataset):
         normalized_source_pc, normalized_target_pc, tre_points = \
             self.normalize_data(source_pc=downsampled_source_pc[..., :3],
                                 target_pc=downsampled_target_pc[..., :3],
-                                tre_points=self.get_tre_points(self.data_path[index]) if self.mode == "test" else None)
+                                tre_points=self.get_tre_points(self.data_path[index]))
+
+        # augmentation in train
+        if self.mode == "train" and self.augment:
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = augment_data(
+                downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points, augmentation_prob=1)
 
         if self.use_target_normalization_as_feature:
             pc1 = normalized_source_pc[..., :3]
@@ -418,10 +419,10 @@ class SceneflowDataset(Dataset):
 
         mask = np.ones([self.npoints])
 
-        # If mode is test also evaluate the tre
-        if self.mode != "test":
-            return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-                   vertebrae_point_inx_src, [], file_id
+        # # If mode is test also evaluate the tre
+        # if self.mode != "test":
+        #     return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
+        #            vertebrae_point_inx_src, [], file_id
 
         # # Getting the tre points for test - this are the 3d coordinates of the target points for tre computation
         # tre_points = self.get_tre_points(self.data_path[index])
