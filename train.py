@@ -97,10 +97,11 @@ def run_experiment(args):
         torch.cuda.set_device(args.gpu_id)
     net = FlowNet3D(args).cuda()
     net.apply(utils.weights_init)
-    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path, raycasted=args.use_raycasted_data)
+    train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
+                                 raycasted=args.use_raycasted_data, augment=not args.no_augmentation, data_seed=args.data_seed)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
     val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
-                               raycasted=args.use_raycasted_data)
+                               raycasted=args.use_raycasted_data, data_seed=args.data_seed)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
     if torch.cuda.device_count() > 1 and args.gpu_id == -1:
         net = nn.DataParallel(net)

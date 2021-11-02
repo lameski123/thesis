@@ -254,7 +254,8 @@ def main():
 
 def test(args, net, textio):
 
-    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path, raycasted=args.use_raycasted_data)
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path,
+                                raycasted=args.use_raycasted_data, data_seed=args.data_seed)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")

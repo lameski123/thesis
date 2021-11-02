@@ -109,7 +109,6 @@ def get_random_rotation():
 
 
 def apply_random_rotation(pc, rotation_center=np.array([0, 0, 0]), r=None):
-
     r = get_random_rotation() if r is None else r
     pc = pc - rotation_center
     rotated_pc = np.dot(pc, r)
@@ -118,7 +117,6 @@ def apply_random_rotation(pc, rotation_center=np.array([0, 0, 0]), r=None):
 
 
 def augment_data(flow, pc1, pc2, augmentation_prob=0.5):
-
     # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
     augmented_pc1 = np.zeros(pc1.shape)
     augmented_pc2 = np.zeros(pc2.shape)
@@ -190,24 +188,28 @@ def _get_spine_number(path: str):
 
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted = False):
+                 raycasted=False, augment=True, data_seed=0):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
         :param mode: mode can be any of the "train", "test" and "validation"
-        :param raycasted: the data used is raycasted or full vertebras
+        :param raycasted: the data used is raycasted or full vertebrae
+        :param augment: if augment data for training
+        :param data_seed: which permutation to use for slicing the dataset
         """
 
         if mode not in ["train", "val", "test"]:
-            raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "validation"')
+            raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "val"')
 
         self.npoints = npoints
         self.mode = mode
         self.root = root
         self.raycasted = raycasted
+        self.augment = augment
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
         self.use_target_normalization_as_feature = True
-        self.spine_splits = {"train": np.arange(1, 20), "val": [21], "test": [22]}
+        train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed, )
+        self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
 
         # #in case we want to test on different data
@@ -216,6 +218,19 @@ class SceneflowDataset(Dataset):
         # else:
 
         # train
+
+    def _get_sets_indices(self, seed: int, num_spines=22):
+        assert seed >= 0 and seed < 5, 'we have only 5 different sets for indices'
+        indices = np.asarray([[10, 9, 0, 8, 3, 14, 2, 5, 12, 16, 15, 6, 1, 17, 13, 18, 7, 4, 11, 19, 20, 21],
+                              [10, 2, 15, 19, 14, 6, 0, 7, 5, 18, 1, 9, 11, 12, 20, 16, 4, 3, 8, 17, 13, 21],
+                              [13, 19, 15, 5, 0, 12, 11, 8, 3, 10, 1, 14, 9, 6, 4, 17, 7, 18, 16, 2, 20, 21],
+                              [4, 11, 6, 10, 20, 13, 0, 12, 15, 14, 16, 9, 7, 2, 17, 3, 5, 8, 18, 1, 19, 21],
+                              [9, 7, 15, 20, 17, 4, 10, 3, 0, 19, 1, 11, 14, 6, 13, 18, 16, 8, 12, 2, 5, 21]])
+        indices += 1
+
+        # np.random.seed(seed)
+        # indices = np.random.permutation(num_spines)
+        return indices[seed, :-3], indices[seed, -3:-1], indices[seed, -1:]
 
     def get_tre_points(self, filename):
         """
@@ -289,11 +304,11 @@ class SceneflowDataset(Dataset):
         # points which will be deleted from the source point indexes to make space for the constraints
 
         # 2.a) Removing K points from the point cloud, with K = N constraints
-        pc_lengths = [item.size for item in [sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5] ]
-        pc_idx_centers = [np.sum(pc_lengths[0:i+1]) - pc_lengths[i]//2 for i in range(5)]
+        pc_lengths = [item.size for item in [sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5]]
+        pc_idx_centers = [np.sum(pc_lengths[0:i + 1]) - pc_lengths[i] // 2 for i in range(5)]
         constraints_per_vertebra = [len(np.where(pc[constraints, -1] == i)[0]) for i in range(1, 6)]
         delete_list = list(chain(*[range(center, center + item)
-                              for (center, item) in zip(pc_idx_centers, constraints_per_vertebra)]))
+                                   for (center, item) in zip(pc_idx_centers, constraints_per_vertebra)]))
         sample_idx_ = np.delete(sample_idx_, delete_list)
 
         # 2.b) Adding the constraints points indexes in the end.
@@ -316,7 +331,7 @@ class SceneflowDataset(Dataset):
 
         return centroid
 
-    def normalize_data(self, source_pc, target_pc, tre_points = None):
+    def normalize_data(self, source_pc, target_pc, tre_points=None):
         """
         The function normalizes the data according to the Fu paper:
 
@@ -372,7 +387,7 @@ class SceneflowDataset(Dataset):
         downsampled_flow = flow[sample_idx_source, :]
 
         # augmentation in train
-        if self.mode == "train":
+        if self.mode == "train" and self.augment:
             downsampled_flow, downsampled_source_pc, downsampled_target_pc = \
                 augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, augmentation_prob=1)
 
@@ -404,13 +419,13 @@ class SceneflowDataset(Dataset):
         # If mode is test also evaluate the tre
         if self.mode != "test":
             return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-               vertebrae_point_inx_src, [], file_id
+                   vertebrae_point_inx_src, [], file_id
 
         # Getting the tre points for test - this are the 3d coordinates of the target points for tre computation
         tre_points = self.get_tre_points(self.data_path[index])
 
         return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-            vertebrae_point_inx_src, [], file_id, tre_points
+               vertebrae_point_inx_src, [], file_id, tre_points
 
     def sample_vertebrae(self, pos1):
 
@@ -433,7 +448,6 @@ class SceneflowDataset(Dataset):
 
     def __len__(self):
         return len(self.data_path)
-
 
 # if __name__ == '__main__':
 #     # train = SceneflowDataset(1024)
