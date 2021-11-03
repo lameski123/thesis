@@ -135,7 +135,7 @@ def get_color_array(vertebrae_idxs):
     return color_array
 
 
-def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None):
+def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None, max_num_batch=-1):
     net.eval()
     total_loss = 0
     mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -148,7 +148,8 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
 
     test_metrics = []
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
-
+        if max_num_batch != -1 and i >= max_num_batch:
+            break
         batch_data = utils.read_batch_data(data)
         if len(batch_data) == 9:
             color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
