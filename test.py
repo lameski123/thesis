@@ -253,10 +253,11 @@ def main():
     test(args, net, textio)
 
 
-def test(args, net, textio):
+def test(args, net, textio, spine_splits=None):
 
     test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path,
-                                raycasted=args.use_raycasted_data, data_seed=args.data_seed)
+                                raycasted=args.use_raycasted_data, data_seed=args.data_seed,
+                                test_id=args.test_id, splits=spine_splits)
     test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
@@ -268,7 +269,7 @@ def test(args, net, textio):
     with torch.no_grad():
         test_loss = test_one_epoch(net, test_loader, args=args, save_results=True, wandb_table=test_table)
 
-    wandb.log({'test_loss': test_loss['TRE']})
+    wandb.log({'Test': {'TRE': test_loss['TRE']}})
 
     textio.cprint('==FINAL TEST==')
     textio.cprint(f'mean test loss: {test_loss}')

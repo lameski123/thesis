@@ -24,6 +24,7 @@ def create_parser():
     parser.add_argument('--use_raycasted_data', action='store_true', help='train on raycasted')
     parser.add_argument('--no_augmentation', action='store_true', help='augment training data')
     parser.add_argument('--data_seed', type=int, choices=[0, 1, 2, 3, 4], default=0, help='determines dataset slicing indices [default: 0]')
+    parser.add_argument('--test_id', type=int, default=None, help='spine id to choose for one leave out testing [default: None]')
     parser.add_argument('--model_path', type=str, default='', metavar='N', help='Pretrained model path')
     parser.add_argument('--test_output_path', type=str, required=False, metavar='N', help='Path to save the test results')
     parser.add_argument('--no_legacy_model', action='store_true', help='use legacy model in test mode')

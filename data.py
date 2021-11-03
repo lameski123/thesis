@@ -190,7 +190,7 @@ def _get_spine_number(path: str):
 
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted=False, augment=True, data_seed=0):
+                 raycasted=False, augment=True, data_seed=0, test_id=None, splits=None):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
@@ -209,17 +209,23 @@ class SceneflowDataset(Dataset):
         self.raycasted = raycasted
         self.augment = augment
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
+
         self.use_target_normalization_as_feature = True
-        train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed, )
-        self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
+
+        if splits is None:
+            if test_id is None:
+                train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed)
+            else:
+                train_idx, val_idx, test_idx = self._leave_one_out_indices(test_id)
+            self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
+        else:  # already divided the data
+            self.spine_splits = splits
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
 
-        # #in case we want to test on different data
-        # if self.train==False:
-        #     self.root = "./spine_clouds"
-        # else:
-
-        # train
+    def _leave_one_out_indices(self, test_id: int, num_spines=22):
+        indices = np.random.permutation(num_spines) + 1
+        indices = [index for index in indices if index != test_id]
+        return indices[:-2], indices[-2:], [test_id]
 
     def _get_sets_indices(self, seed: int, num_spines=22):
         assert seed >= 0 and seed < 5, 'we have only 5 different sets for indices'
@@ -412,6 +418,7 @@ class SceneflowDataset(Dataset):
             pc2 = np.copy(normalized_target_pc)
             feature1 = np.ones((normalized_source_pc.shape[0],))
             feature2 = np.ones((normalized_source_pc.shape[0],))
+
 
         # getting the vertebrae indexes needed to compute the losses
         L1_source, L2_source, L3_source, L4_source, L5_source = vertebrae_surface(downsampled_source_pc[..., 3])
