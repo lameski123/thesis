@@ -278,7 +278,7 @@ class SceneflowDataset(Dataset):
     def _leave_one_out_indices(self, test_id: int, num_spines=22):
         indices = np.random.permutation(num_spines) + 1
         indices = [index for index in indices if index != test_id]
-        return indices[:-2], indices[-2:], [test_id]
+        return indices[:-3], indices[-3:], [test_id]
 
     def _get_sets_indices(self, seed: int, num_spines=22):
         assert seed >= 0 and seed < 5, 'we have only 5 different sets for indices'
@@ -291,7 +291,7 @@ class SceneflowDataset(Dataset):
 
         # np.random.seed(seed)
         # indices = np.random.permutation(num_spines)
-        return indices[seed, :-3], indices[seed, -3:-1], indices[seed, -1:]
+        return indices[seed, :-4], indices[seed, -4:-1], indices[seed, -1:]
 
     def get_tre_points(self, filename):
         """
