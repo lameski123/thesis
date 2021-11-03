@@ -161,7 +161,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
         batch_size = pc1.size(0)
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                ['all'], pc1, pc2, position1, args.loss_coeff)
+                                                                                ['all'], pc1, pc2, position1, args.loss_coeff.copy())
 
         metrics, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
                                                                                        source_pc=pc1,
