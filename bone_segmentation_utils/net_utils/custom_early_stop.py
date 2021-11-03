@@ -34,5 +34,5 @@ class CustomEarlyStopping(EarlyStopping):
                         trainer.should_stop = True
 
             # stop every ddp process if any world process decides to stop
-            should_stop = trainer.accelerator_backend.early_stopping_should_stop(pl_module)
-            trainer.should_stop = should_stop
+            #should_stop = trainer.accelerator_backend.early_stopping_should_stop(pl_module)
+            #trainer.should_stop = should_stop

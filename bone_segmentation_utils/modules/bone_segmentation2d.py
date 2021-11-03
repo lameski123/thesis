@@ -238,13 +238,13 @@ class BoneSegmentation(pl.LightningModule):
     def save_test_image(batch, predictions, savepath):
 
         predictions = np.squeeze(predictions.to("cpu").numpy(), axis=1)
-        images = np.squeeze(batch['image'].to("cpu").numpy(), axis=1)
-        labels = np.squeeze(batch['label'].to("cpu").numpy(), axis=1)
+        images = np.squeeze(batch['Image'].to("cpu").numpy(), axis=1)
+        labels = np.squeeze(batch['Label'].to("cpu").numpy(), axis=1)
 
         batch_size = predictions.shape[0]
         for i in range(batch_size):
 
-            filename = batch['filename'][i]
+            filename = batch['ImageName'][i]
             prediction = predictions[i]
             label = labels[i]
             image = images[i]

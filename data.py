@@ -102,6 +102,7 @@ def vertebrae_surface(surface):
 
 def get_random_rotation():
     angle_target = np.random.randint(-20, 20)
+
     xyz = np.random.choice(["x", "y", "z"])
 
     r = Rotation.from_euler(xyz, angle_target * np.pi / 180)
@@ -109,11 +110,47 @@ def get_random_rotation():
 
 
 def apply_random_rotation(pc, rotation_center=np.array([0, 0, 0]), r=None):
+
     r = get_random_rotation() if r is None else r
     pc = pc - rotation_center
     rotated_pc = np.dot(pc, r)
 
     return rotated_pc + rotation_center
+
+
+def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
+    # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
+    augmented_pc1 = np.zeros(pc1.shape)
+    augmented_pc2 = np.zeros(pc2.shape)
+
+    if pc1.shape[1] == 4:
+        augmented_pc1[:, -1] = pc1[:, -1]
+        pc1 = pc1[:, :3]
+
+    if pc2.shape[1] == 4:
+        augmented_pc2[:, -1] = pc2[:, -1]
+        pc2 = pc2[:, :3]
+
+    angle_target = rotation
+    xyz = axis
+
+    # ###### Augmenting the data #######
+    # The ground truth position of the deformed source
+    gt_target = pc1 + flow
+
+    # rotate the source
+    r = Rotation.from_euler(xyz, angle_target * np.pi / 180)
+    r = r.as_matrix()
+    pc1 = apply_random_rotation(pc1, r=r, rotation_center=np.mean(pc1, axis=0))
+    tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], r=r, rotation_center=np.mean(pc1, axis=0))
+
+    # recompute the flow with the updated pc1 and gt_target
+    flow = gt_target - pc1
+
+    augmented_pc1[:, 0:3] = pc1
+    augmented_pc2[:, 0:3] = pc2
+
+    return flow, augmented_pc1, augmented_pc2, tre_points
 
 
 def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
@@ -136,6 +173,7 @@ def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     # rotate the source with a probability 0.5
     if np.random.random() < augmentation_prob:
         # rotate the source about its centroid randomly and update flow accordingly
+
         r = get_random_rotation()
         pc1 = apply_random_rotation(pc1, r=r, rotation_center=np.mean(pc1, axis=0))
         tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], r=r, rotation_center=np.mean(pc1, axis=0))
@@ -190,18 +228,19 @@ def _get_spine_number(path: str):
 
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted=False, augment=True, data_seed=0, test_id=None, splits=None):
+                 raycasted=False, augment=True, data_seed=0, test_id=None, splits=None, **kwargs):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
         :param mode: mode can be any of the "train", "test" and "validation"
+        :param raycasted: the data used is raycasted or full vertebras
         :param raycasted: the data used is raycasted or full vertebrae
         :param augment: if augment data for training
         :param data_seed: which permutation to use for slicing the dataset
         """
 
         if mode not in ["train", "val", "test"]:
-            raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "val"')
+            raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "validation"')
 
         self.npoints = npoints
         self.mode = mode
@@ -222,6 +261,20 @@ class SceneflowDataset(Dataset):
             self.spine_splits = splits
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
 
+        if "augment_test" in kwargs.keys():
+            self.augment_test = kwargs["augment_test"]
+            self.test_rotation_degree = kwargs["test_rotation_degree"]
+            self.test_rotation_axis = kwargs["test_rotation_axis"]
+        else:
+            self.augment_test = False
+            self.test_rotation_degree = None
+            self.test_rotation_axis = None
+
+        # #in case we want to test on different data
+        # if self.train==False:
+        #     self.root = "./spine_clouds"
+        # else:
+        
     def _leave_one_out_indices(self, test_id: int, num_spines=22):
         indices = np.random.permutation(num_spines) + 1
         indices = [index for index in indices if index != test_id]
@@ -339,7 +392,7 @@ class SceneflowDataset(Dataset):
 
         return centroid
 
-    def normalize_data(self, source_pc, target_pc, tre_points=None):
+    def normalize_data(self, source_pc, target_pc, tre_points = None):
         """
         The function normalizes the data according to the Fu paper:
 
@@ -394,6 +447,22 @@ class SceneflowDataset(Dataset):
         downsampled_target_pc = target_pc[sample_idx_target, ...]
         downsampled_flow = flow[sample_idx_source, :]
 
+        tre_points = self.get_tre_points(self.data_path[index])
+
+        # augmentation in train
+        if self.mode == "train" and self.augment:
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
+                augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points,
+                             augmentation_prob=0.5)
+
+        if self.mode == "test" and self.augment_test:
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
+                augment_test(flow=downsampled_flow,
+                             pc1=downsampled_source_pc,
+                             pc2=downsampled_target_pc,
+                             tre_points=tre_points,
+                             rotation=self.test_rotation_degree,
+                             axis=self.test_rotation_axis)
 
         # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
         # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
@@ -401,12 +470,7 @@ class SceneflowDataset(Dataset):
         normalized_source_pc, normalized_target_pc, tre_points = \
             self.normalize_data(source_pc=downsampled_source_pc[..., :3],
                                 target_pc=downsampled_target_pc[..., :3],
-                                tre_points=self.get_tre_points(self.data_path[index]))
-
-        # augmentation in train
-        if self.mode == "train" and self.augment:
-            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = augment_data(
-                downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points, augmentation_prob=1)
+                                tre_points=tre_points)
 
         if self.use_target_normalization_as_feature:
             pc1 = normalized_source_pc[..., :3]
@@ -426,16 +490,8 @@ class SceneflowDataset(Dataset):
 
         mask = np.ones([self.npoints])
 
-        # # If mode is test also evaluate the tre
-        # if self.mode != "test":
-        #     return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-        #            vertebrae_point_inx_src, [], file_id
-
-        # # Getting the tre points for test - this are the 3d coordinates of the target points for tre computation
-        # tre_points = self.get_tre_points(self.data_path[index])
-
         return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
-               vertebrae_point_inx_src, [], file_id, tre_points
+                    vertebrae_point_inx_src, [], file_id, tre_points
 
     def sample_vertebrae(self, pos1):
 

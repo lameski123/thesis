@@ -163,11 +163,14 @@ def get_result_dict(source, gt_flow, predicted_pc, predicted_T, tre_points, posi
         predicted_registered_target = np.matmul(predicted_T, vertebra_target)  # Nx4
         tre = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=0)
 
+        wandb.log({"TRE": np.mean(tre)})
+        print("tre: ", np.mean(tre))
+
         result.append( { 'mse loss': mse_loss,
                          'Chamfer Distance': chamfer_dist,
                          'translation distance': translation_distance,
                          'quaternion distance': quaternion_distance,
-                         'TRE': tre})
+                         'TRE': np.mean(tre)})
 
     return result
 
@@ -230,7 +233,9 @@ def get_average_metrics_over_vertebrae(result_list):
 
     average_dict = dict()
     for key in result_list[0].keys():
-        average_dict[key] = np.mean([item[key] for item in result_list])
+        average_dict[key] = np.nanmean([item[key] for item in result_list])
+
+    print("avg_tre: ", average_dict["TRE"])
 
     return average_dict
 
@@ -245,6 +250,24 @@ def append_avg_metrics(result_list):
 
     result_list.append(average_dict)
     return result_list
+
+
+def save_training_data(save_folder, data_id, source, deformed_source, original_flow, target, constraint, tre=None):
+
+    gt_deformed_source = source + original_flow
+    source = np.copy(deformed_source)
+    new_flow = gt_deformed_source - deformed_source
+
+    filename = os.path.join(save_folder, data_id + ".npz")
+
+    np.savez_compressed(file=filename,
+                        flow=new_flow,
+                        pc1=source,
+                        pc2=target,
+                        ctsPts=constraint)
+
+    if tre is not None:
+        np.savetxt(os.path.join(save_folder, filename.split("_")[0] + "facet_targets.txt"), tre)
 
 
 def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
@@ -268,7 +291,22 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
 
     # 1.a First iteration to alight the spines
     cpd_method = BiomechanicalCpd(target_pc=target_pc, source_pc=source_pc, max_iterations=cpd_iterations)
-    source_pc_it1, predicted_T_it1 = run_registration(cpd_method, with_callback=plot_iterations)
+
+    try:
+        source_pc_it1, predicted_T_it1 = run_registration(cpd_method, with_callback=plot_iterations)
+    except:
+        return [{ 'mse loss': np.nan,
+                         'Chamfer Distance': np.nan,
+                         'translation distance': np.nan,
+                         'quaternion distance': np.nan,
+                         'TRE': np.nan}]
+    # save_training_data(save_folder="E:/NAS/jane_project/pre_initialized_rigid_cpd",
+    #                    data_id = file_name,
+    #                    source = source_pc,
+    #                    deformed_source = source_pc_it1,
+    #                    original_flow= gt_flow,
+    #                    target = target_pc,
+    #                    constraint=constraint)
 
     # ##############################################################################################################
     # ################################ 2.  2nd CPD iteration on each vertebra ######################################
@@ -283,6 +321,11 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
 
     # 2.c Iterate over all vertebrae and apply the constrained CPD
     result_iter2 = []
+
+    full_source = []
+    original_flow = []
+    deformed_source = []
+    tre_list = []
     for i, vertebra in enumerate(vertebra_dict_it1):
 
         # 2.d Selecting the target vertebra by proximity
@@ -291,7 +334,18 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
         # 2.e Running the constrained registration for the given vertebra
         reg = BiomechanicalCpd(target_pc=target_vertebra, source_pc=vertebra['source'], springs=vertebra['springs'],
                                max_iterations=cpd_iterations)
-        source_pc_it2, predicted_T_it2 = run_registration(reg, with_callback=plot_iterations)
+
+        try:
+            source_pc_it2, predicted_T_it2 = run_registration(reg, with_callback=plot_iterations)
+        except:
+            return [{'mse loss': np.nan,
+                     'Chamfer Distance': np.nan,
+                     'translation distance': np.nan,
+                     'quaternion distance': np.nan,
+                     'TRE': np.nan}]
+        deformed_source.append(source_pc_it2)
+        full_source.append(vertebra_dict[i]['source'])
+        original_flow.append(vertebra_dict[i]['gt_flow'])
 
         # 2.f Computing the overall transformation for the given vertebra
         original_source_vertebra = vertebra_dict[i]['source']
@@ -299,6 +353,10 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
         overall_T = np.matmul(predicted_T_it2, predicted_T_it1)
         predicted_pc = np.matmul(overall_T, homogenous_source)
         predicted_pc = np.transpose(predicted_pc)[..., 0:3]
+
+        if vertebra_dict[i]['tre_points'].size > 0:
+            transformed_tre = np.matmul(overall_T, np.transpose(vertebra_dict[i]['tre_points']))
+            tre_list.append(np.transpose(transformed_tre))
 
         # 2.g Sanity check using ground truth transform
         predicted_gt = np.matmul(vertebra_dict[i]['gt_transform'], homogenous_source)  # sanity check
@@ -325,32 +383,47 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
                              },
                   save_path=os.path.join(save_path, file_name))
 
+    # save_training_data(save_folder="E:/NAS/jane_project/pre_initialized_cpd",
+    #                    data_id = file_name,
+    #                    source = np.concatenate(full_source, axis=0),
+    #                    deformed_source = np.concatenate(deformed_source, axis=0),
+    #                    original_flow= np.concatenate(original_flow, axis=0),
+    #                    target = target_pc,
+    #                    constraint=constraint,
+    #                    tre = np.concatenate(tre_list, axis=0 if "spine22" in file_name else None)
+    #                    )
+
     average_result = get_average_metrics_over_vertebrae(result_iter2)
     average_result['id'] = file_name
 
     return average_result
 
 
-def main(dataset_path, save_path, cpd_iterations, wandb_key=None):
+def main(dataset_path, save_path, cpd_iterations, rot_degree, rot_axis, wandb_key=None, wandb_name=""):
 
     wandb.login(key=wandb_key)
-    wandb.init(project='spine_flownet', mode = "disabled")  # , mode = "disabled"
-    wandb.run.name = "cpd-baseline"
+    wandb.init(project='spine_flownet')  # , mode = "disabled"
+    wandb.run.name = wandb_name
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
     columns = ['id', 'mse loss', 'Chamfer Distance', 'quaternion distance', 'translation distance', 'TRE']
     test_table = wandb.Table(columns=columns)
 
-    test_set = SceneflowDataset(mode="test", root=dataset_path, raycasted=True)
+    test_set = SceneflowDataset(mode="test",
+                                root=dataset_path,
+                                raycasted=True,
+                                augment_test=True,
+                                test_rotation_degree=rot_degree,
+                                test_rotation_axis=rot_axis
+                                )
 
     results = []
     for i, data in enumerate(test_set):
-        # if i > 2:
-        #     continue
+
         results.append(run_cpd(data_batch=data,
                                save_path=save_path,
                                cpd_iterations=cpd_iterations,
-                               plot_iterations=False))
+                               plot_iterations=True))
 
     results = append_avg_metrics(results)
 
@@ -371,5 +444,14 @@ if __name__ == '__main__':
     parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")
 
     args = parser.parse_args()
+    #for cpd_iterations in range(10, 100, 10):
 
-    main(args.dataset_path, args.save_path, cpd_iterations=args.cpd_iterations)
+    for axis in ["x", "y", "z"]:
+        for rotation in [-90, -70, -50, -20]:
+            main(dataset_path=args.dataset_path,
+                 save_path=args.save_path,
+                 cpd_iterations=20,
+                 rot_degree=rotation,
+                 rot_axis=axis,
+                 wandb_key=args.wandb_key,
+                 wandb_name = "cpd-rot" + str(rotation) + "-axis-" + axis)

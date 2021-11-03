@@ -3,6 +3,7 @@ from PIL import Image
 from shutil import copy2
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
 
 
 def ray_cast_image(image):
@@ -11,11 +12,26 @@ def ray_cast_image(image):
 
     for i in range(image.shape[1]):
         for j in j_range:
-            if image[j, i] != 12:
+            if image[j, i] != 0:
                 rays[j, i] = 1
                 break
 
     return rays
+
+def generate_all_in_folder(folder_path, save_dir):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    for image_name in os.listdir(folder_path):
+
+        label = np.array(Image.open(os.path.join(folder_path, image_name)))
+        ray_casted_labels = ray_cast_image(label)
+
+        ray_casted_labels = cv2.dilate(ray_casted_labels, np.ones((10, 10)), iterations=1)
+
+        image_save_path = os.path.join(save_dir, image_name)
+
+        Image.fromarray(ray_casted_labels).save(image_save_path)
 
 
 def generate_raycasted_db(db_path, output_dir):
@@ -48,5 +64,8 @@ def generate_raycasted_db(db_path, output_dir):
             Image.fromarray(ray_casted_labels).save(label_save_path)
 
 
-generate_raycasted_db(db_path="E:/NAS/jane_project/segmentation_network_data/full_labels",
-                      output_dir="E:/NAS/jane_project/segmentation_network_data/ray_casted_labels")
+generate_all_in_folder(folder_path="C:/Users/maria/OneDrive/Desktop/data_images/us_full_label",
+                      save_dir="C:/Users/maria/OneDrive/Desktop/data_images/us_raycasted")
+
+# generate_raycasted_db(db_path="C:/Users/maria/OneDrive/Desktop/data_images/us_full_label",
+#                       output_dir="C:/Users/maria/OneDrive/Desktop/data_images/us_raycasted")
