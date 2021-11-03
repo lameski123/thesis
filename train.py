@@ -43,7 +43,7 @@ def train(args, net, train_loader, val_loader, textio):
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
         with torch.no_grad():
-            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
+            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None, max_num_batch=40)
         test_loss = test_losses['TRE']
         textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
