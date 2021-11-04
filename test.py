@@ -271,7 +271,7 @@ def test(args, net, textio, spine_splits=None):
     with torch.no_grad():
         test_loss = test_one_epoch(net, test_loader, args=args, save_results=True, wandb_table=test_table)
 
-    wandb.log({'Test': {'TRE': test_loss['TRE']}})
+    wandb.log({'Test': test_loss})
 
     textio.cprint('==FINAL TEST==')
     textio.cprint(f'mean test loss: {test_loss}')
