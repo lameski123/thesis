@@ -100,8 +100,8 @@ def vertebrae_surface(surface):
     return L1, L2, L3, L4, L5
 
 
-def get_random_rotation():
-    angle_target = np.random.randint(-20, 20)
+def get_random_rotation(max_rotation=20.0):
+    angle_target = np.random.randint(-max_rotation, max_rotation)
 
     xyz = np.random.choice(["x", "y", "z"])
 
@@ -118,7 +118,7 @@ def apply_random_rotation(pc, rotation_center=np.array([0, 0, 0]), r=None):
     return rotated_pc + rotation_center
 
 
-def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
+def augment_test(flow, pc1, pc2, tre_points, max_rotation=20.0, rotation=0, axis=None):
     # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
     augmented_pc1 = np.zeros(pc1.shape)
     augmented_pc2 = np.zeros(pc2.shape)
@@ -131,16 +131,17 @@ def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
         augmented_pc2[:, -1] = pc2[:, -1]
         pc2 = pc2[:, :3]
 
-    angle_target = rotation
-    xyz = axis
-
     # ###### Augmenting the data #######
     # The ground truth position of the deformed source
     gt_target = pc1 + flow
 
     # rotate the source
-    r = Rotation.from_euler(xyz, angle_target * np.pi / 180)
-    r = r.as_matrix()
+
+    if axis is None:
+        r = get_random_rotation(max_rotation)
+    else:
+        r = Rotation.from_euler(axis, rotation * np.pi / 180)
+        r = r.as_matrix()
     pc1 = apply_random_rotation(pc1, r=r, rotation_center=np.mean(pc1, axis=0))
     tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], r=r, rotation_center=np.mean(pc1, axis=0))
 
@@ -153,7 +154,7 @@ def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
     return flow, augmented_pc1, augmented_pc2, tre_points
 
 
-def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
+def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5, max_rotation=20):
     # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
     augmented_pc1 = np.zeros(pc1.shape)
     augmented_pc2 = np.zeros(pc2.shape)
@@ -174,7 +175,7 @@ def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     if np.random.random() < augmentation_prob:
         # rotate the source about its centroid randomly and update flow accordingly
 
-        r = get_random_rotation()
+        r = get_random_rotation(max_rotation)
         pc1 = apply_random_rotation(pc1, r=r, rotation_center=np.mean(pc1, axis=0))
         tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], r=r, rotation_center=np.mean(pc1, axis=0))
 
@@ -182,7 +183,7 @@ def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     if np.random.random() < augmentation_prob:
         # apply the same rotation to ground truth target and pc2 (a rotation about the target centroid)
         # and update flow accordingly
-        r = get_random_rotation()
+        r = get_random_rotation(max_rotation)
         pc2 = apply_random_rotation(pc2, r=r, rotation_center=np.mean(pc2, axis=0))
         gt_target = apply_random_rotation(gt_target, r=r, rotation_center=np.mean(pc2, axis=0))
 
@@ -263,12 +264,21 @@ class SceneflowDataset(Dataset):
 
         if "augment_test" in kwargs.keys():
             self.augment_test = kwargs["augment_test"]
-            self.test_rotation_degree = kwargs["test_rotation_degree"]
-            self.test_rotation_axis = kwargs["test_rotation_axis"]
+            if "test_rotation_degree" in kwargs.keys() and "test_rotation_axis" in kwargs.keys():
+                self.test_rotation_degree = kwargs["test_rotation_degree"]
+                self.test_rotation_axis = kwargs["test_rotation_axis"]
+            else:
+                self.test_rotation_degree = None
+                self.test_rotation_axis = None
         else:
             self.augment_test = False
             self.test_rotation_degree = None
             self.test_rotation_axis = None
+
+        if "max_rotation" in kwargs.keys():
+            self.max_rotation = kwargs['max_rotation']
+        else:
+            self.max_rotation = 20.0
 
         # #in case we want to test on different data
         # if self.train==False:
@@ -453,16 +463,17 @@ class SceneflowDataset(Dataset):
         if self.mode == "train" and self.augment:
             downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
                 augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points,
-                             augmentation_prob=0.5)
+                             augmentation_prob=0.5, max_rotation=self.max_rotation)
 
-        if self.mode == "test" and self.augment_test:
+        if (self.mode == "test" or self.mode == "val") and self.augment_test:
             downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
                 augment_test(flow=downsampled_flow,
                              pc1=downsampled_source_pc,
                              pc2=downsampled_target_pc,
                              tre_points=tre_points,
                              rotation=self.test_rotation_degree,
-                             axis=self.test_rotation_axis)
+                             axis=self.test_rotation_axis,
+                             max_rotation=self.max_rotation)
 
         # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
         # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
