@@ -261,7 +261,7 @@ def test(args, net, textio, spine_splits=None):
                                 test_id=args.test_id, splits=spine_splits,
                                 max_rotation=args.max_rotation, augment_test=args.augment_test,
                                 test_rotation_axis=args.test_rotation_axis, test_rotation_degree=args.max_rotation)
-    test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
+    test_loader = DataLoader(test_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
 

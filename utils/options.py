@@ -16,6 +16,7 @@ def create_parser():
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M', help='SGD momentum (default: 0.9)')
     parser.add_argument('--no_cuda', action='store_true', default=False, help='enables CUDA training')
     parser.add_argument('--seed', type=int, default=100, metavar='S', help='random seed (default: 100)')
+    parser.add_argument('--num_workers', type=int, default=4, metavar='S', help='num of workers for dataloader (default: 4)')
     parser.add_argument('--eval', action='store_true', default=False, help='evaluate the model')
     parser.add_argument('--cycle', type=bool, default=False, metavar='N', help='Whether to use cycle consistency')
     parser.add_argument('--gaussian_noise', type=bool, default=False, metavar='N', help='Wheter to add gaussian noise')
