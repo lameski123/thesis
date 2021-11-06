@@ -228,12 +228,12 @@ def get_subject_based_random_split(subject_ids, split_percentages=(80, 10, 10)):
 
     assert sum(split_percentages) == 100, "Only full db subjects usage is supported"
 
+    if len(split_percentages) == 2:
+        split_percentages = (split_percentages[0], split_percentages[1], 0)
+
     splits = ['train', 'val', 'test']
     ordered_splits = np.argsort(split_percentages)
     dataset_size = len(subject_ids)
-
-    if len(split_percentages) == 2:
-        split_percentages = (split_percentages[0], split_percentages[1], 0)
 
     split_dict = dict()
     for i in ordered_splits:

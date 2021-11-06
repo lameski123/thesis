@@ -24,7 +24,7 @@ from test import test_one_epoch, test, compute_test_metrics, get_color_array
 
 args = None
 
-def train(args, net, train_loader, val_loader, textio):
+def train(args, net, train_loader, val_loader, textio, two_stage_refinement=False):
     if args.use_sgd:
         print("Use SGD")
         opt = optim.SGD(net.parameters(), lr=args.lr * 100, momentum=args.momentum, weight_decay=1e-4)
@@ -38,11 +38,12 @@ def train(args, net, train_loader, val_loader, textio):
     best_net = None
     for epoch in range(args.epochs):
         textio.cprint('==epoch: %d, learning rate: %f==' % (epoch, opt.param_groups[0]['lr']))
-        train_losses = train_one_epoch(net, train_loader, opt, args.loss, args)
+        train_losses = train_one_epoch(net, train_loader, opt, args.loss, args, two_stage_refinement)
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
         with torch.no_grad():
-            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
+            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None,
+                                         two_stage_refinement=two_stage_refinement)
         test_loss = test_losses['TRE']
         textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
@@ -61,42 +62,103 @@ def train(args, net, train_loader, val_loader, textio):
     return best_net
 
 
-def train_one_epoch(net, train_loader, opt, loss_opt, args):
+def train_single_phase(net, loss_opt, loss_coeff, color1, color2, constraint, flow, pc1, pc2, position1):
+    batch_size = pc1.size(0)
+    flow_pred = net(pc1, pc2, color1, color2)
+    bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size,
+                                                                            constraint,
+                                                                            flow,
+                                                                            flow_pred,
+                                                                            loss_opt,
+                                                                            pc1,
+                                                                            pc2,
+                                                                            position1,
+                                                                            loss_coeff)
+
+    return flow_pred, loss, {'bio_loss': bio_loss,
+                             'chamfer_loss': chamfer_loss,
+                             'loss': loss,
+                             'mse_loss': mse_loss,
+                             'rig_loss': rig_loss
+                             }
+
+
+def train_one_epoch(net, train_loader, opt, loss_opt, args, two_stage_refinement = False):
+    # two_stage_refinement = False
     net.train()
     total_loss = 0
     mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
     for i, data in tqdm(enumerate(train_loader), total=len(train_loader)):
-        batch_data = utils.read_batch_data(data)
-        if len(batch_data) == 9:
-            color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
-        else:
-            color1, color2, constraint, flow, pc1, pc2, position1, fn = batch_data
-            tre_points = None
-        source_color = get_color_array(position1)
+
+        color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = utils.read_batch_data(data)
+
+        if two_stage_refinement and color1.shape[1] > 1:
+            raise ValueError("Two stage refinement is only supported when 1-d colors are the input feature")
+
         batch_size = pc1.size(0)
         opt.zero_grad()
-        flow_pred = net(pc1, pc2, color1, color2)
-        bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                loss_opt, pc1, pc2, position1,
-                                                                                args.loss_coeff)
-        metrics, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
-                                                                                       source_pc=pc1,
-                                                                                       source_color=source_color,
-                                                                                       gt_flow=flow,
-                                                                                       estimated_flow=flow_pred.detach(),
-                                                                                       tre_points=tre_points)
 
-        mse_loss_total += mse_loss.item() / len(train_loader)
-        bio_loss_total += bio_loss.item() / len(train_loader)
-        rig_loss_total += rig_loss.item() / len(train_loader)
-        chamfer_loss_total += chamfer_loss.item() / len(train_loader)
-        total_loss += loss.item() / len(train_loader)
-        tre_total += tre / len(train_loader)
+        # The first iteration will use the input color if only one stage is performed, otherwise it will assign the same
+        # color to all points in the source and target point clouds
+        flow_pred, loss, losses_dict = train_single_phase(net=net,
+                                                          loss_opt=loss_opt,
+                                                          loss_coeff=args.loss_coeff,
+                                                          color1=color1*0+1 if two_stage_refinement else color1,
+                                                          color2=color2*0+1 if two_stage_refinement else color2,
+                                                          constraint=constraint,
+                                                          flow=flow,
+                                                          pc1=pc1,
+                                                          pc2=pc2,
+                                                          position1=position1)
+        # Running the second stage prediction
+        if two_stage_refinement:
+            predicted_flow = flow_pred.clone().detach()
+            updated_pc1 = pc1 + predicted_flow
+            updated_gt_glow = flow - predicted_flow
+            source_color = color1
+
+            target_color = utils.estimate_target_color(updated_pc1, pc2, color1).cuda().contiguous().float()
+            flow_pred_it2, loss_iter2,  losses_dict = train_single_phase(net=net,
+                                                                         loss_opt=loss_opt,
+                                                                         loss_coeff=args.loss_coeff,
+                                                                         color1=source_color,
+                                                                         color2=target_color,
+                                                                         constraint=constraint,
+                                                                         flow=updated_gt_glow,
+                                                                         pc1=updated_pc1.clone().detach(),
+                                                                         pc2=pc2.clone().detach(),
+                                                                         position1=position1)
+
+            overall_predicted_flow = flow_pred + flow_pred_it2
+            loss += loss_iter2
+        else:
+            source_color = get_color_array(position1)
+            overall_predicted_flow = flow_pred
 
         loss.backward()
+
+        _, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
+                                                                                 source_pc=pc1,
+                                                                                 source_color = source_color if isinstance(source_color, np.ndarray) else torch.squeeze(source_color.detach(), dim=1),
+                                                                                 gt_flow=flow,
+                                                                                 estimated_flow=overall_predicted_flow.detach(),
+                                                                                 tre_points=tre_points)
+
+        mse_loss_total += losses_dict['mse_loss'].item() / len(train_loader)
+        bio_loss_total += losses_dict['bio_loss'].item() / len(train_loader)
+        rig_loss_total += losses_dict['rig_loss'].item() / len(train_loader)
+        chamfer_loss_total += losses_dict['chamfer_loss'].item() / len(train_loader)
+        total_loss += losses_dict['loss'].item() / len(train_loader)
+        tre_total += tre / len(train_loader)
+
+        # Backpropagate the loss
+
+
         opt.step()
         if i % 50 == 0 and args.wandb_sweep_id is None:  # plot only if not in sweep mode
             utils.plot_pointcloud(flow_pred, pc1, pc2)
+
+        # computing refined loss
 
     losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
               'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total, 'TRE': tre_total}
@@ -115,16 +177,21 @@ def run_experiment(args):
         torch.cuda.set_device(args.gpu_id)
     net = FlowNet3D(args).cuda()
     net.apply(utils.weights_init)
+
+    #todo set as args entry
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
-                                 raycasted=args.use_raycasted_data, augment=not args.no_augmentation, data_seed=args.data_seed)
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
+                                 raycasted=args.use_raycasted_data, augment=not args.no_augmentation, data_seed=args.data_seed,
+                                 use_target_normalization_as_feature=False)
+
+    train_loader = DataLoader(train_set, batch_size=1, drop_last=True)
     val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
-                               raycasted=args.use_raycasted_data, data_seed=args.data_seed)
+                               raycasted=args.use_raycasted_data, data_seed=args.data_seed,
+                               use_target_normalization_as_feature=False)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
     if torch.cuda.device_count() > 1 and args.gpu_id == -1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
-    best_net = train(args, net, train_loader, val_loader, textio)
+    best_net = train(args, net, train_loader, val_loader, textio, two_stage_refinement=True)
     # test after training
     test(args, best_net, textio)
 

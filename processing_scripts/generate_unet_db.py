@@ -26,7 +26,7 @@ def generate_us_labels_batch_file(src_labels_dir, src_ultrasound_dir, output_dir
     """
     #assert "train" in training_splits.keys() and "val" in training_splits.keys() and "test" in training_splits.keys()
 
-    for split in [ "test"]:
+    for split in [ "train"]:
         if not os.path.exists(os.path.join(output_dir, split)):
             os.makedirs(os.path.join(output_dir, split))
 
@@ -35,8 +35,8 @@ def generate_us_labels_batch_file(src_labels_dir, src_ultrasound_dir, output_dir
         os.makedirs(output_dir)
 
     fid = open(batch_file_path, "w")
-    # fid.write("USNAME;LABELNAME;INPUTLABEL;INPUTUS;OUTPUTPATH")
-    fid.write("USNAME;INPUTUS;OUTPUTPATH")
+    fid.write("USNAME;LABELNAME;INPUTLABEL;INPUTUS;OUTPUTPATH")
+    # fid.write("USNAME;INPUTUS;OUTPUTPATH")
 
     for spine_id in spine_ids:
 
@@ -62,7 +62,8 @@ def generate_us_labels_batch_file(src_labels_dir, src_ultrasound_dir, output_dir
             image_name = spine_id + "_" + ts + "_"
             label_name = spine_id + "_" + ts + "_label_"
 
-            fid.write("\n" + image_name + ";" + input_us_path + ";" + save_path)
+            # fid.write("\n" + image_name + ";" + input_us_path + ";" + save_path)
+            fid.write("\n" + image_name + ";" + label_name + ";" + input_labels_path + ";" + input_us_path + ";" + save_path)
 
     fid.close()
 
@@ -70,11 +71,13 @@ def generate_us_labels_batch_file(src_labels_dir, src_ultrasound_dir, output_dir
 train_spines = ["spine" + str(i) for i in range(1, 21)]
 val_spines = ["spine21"]
 test_spines = ["spine" + str(i) for i in range(1, 23)]
+
+train_spines = ["spine22"]
 generate_us_labels_batch_file(src_labels_dir="E:/NAS/jane_project/simulated_us_labelmaps",
                               src_ultrasound_dir="E:/NAS/jane_project/simulated_us",
-                              output_dir="C:/Repo/thesis/bone_segmentation_utils/data",
+                              output_dir="C:/Users/maria/OneDrive/Desktop/new_dat",
                               batch_file_path="../imfusion_workspaces/us_label_data.txt",
-                              training_splits = {
-                                                 "test": test_spines
-                                                 })
+                              training_splits={
+                                              "train": train_spines
+                                              })
 print("done")

@@ -11,7 +11,10 @@ import os
 from sklearn.neighbors import KDTree
 from sklearn.metrics import mean_squared_error
 import wandb
+from types import SimpleNamespace
+from datetime import datetime
 
+args=None
 
 def get_closest_points(pc1, pc2):
     """
@@ -246,7 +249,7 @@ def append_avg_metrics(result_list):
         if key == "id":
             average_dict[key] = "Average"
             continue
-        average_dict[key] = np.mean([item[key] for item in result_list])
+        average_dict[key] = np.nanmean([item[key] for item in result_list])
 
     result_list.append(average_dict)
     return result_list
@@ -295,11 +298,12 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
     try:
         source_pc_it1, predicted_T_it1 = run_registration(cpd_method, with_callback=plot_iterations)
     except:
-        return [{ 'mse loss': np.nan,
+        return { 'mse loss': np.nan,
                          'Chamfer Distance': np.nan,
                          'translation distance': np.nan,
                          'quaternion distance': np.nan,
-                         'TRE': np.nan}]
+                         'TRE': np.nan,
+                        'id':file_name}
     # save_training_data(save_folder="E:/NAS/jane_project/pre_initialized_rigid_cpd",
     #                    data_id = file_name,
     #                    source = source_pc,
@@ -338,11 +342,12 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
         try:
             source_pc_it2, predicted_T_it2 = run_registration(reg, with_callback=plot_iterations)
         except:
-            return [{'mse loss': np.nan,
+            return {'mse loss': np.nan,
                      'Chamfer Distance': np.nan,
                      'translation distance': np.nan,
                      'quaternion distance': np.nan,
-                     'TRE': np.nan}]
+                     'TRE': np.nan,
+                    'id':file_name}
         deformed_source.append(source_pc_it2)
         full_source.append(vertebra_dict[i]['source'])
         original_flow.append(vertebra_dict[i]['gt_flow'])
@@ -399,33 +404,48 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
     return average_result
 
 
-def main(dataset_path, save_path, cpd_iterations, rot_degree, rot_axis, wandb_key=None, wandb_name=""):
-
-    wandb.login(key=wandb_key)
-    wandb.init(project='spine_flownet')  # , mode = "disabled"
-    wandb.run.name = wandb_name
+def main(dataset_path, save_path, cpd_iterations, rot_degree=None, rot_axis=None):
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
     columns = ['id', 'mse loss', 'Chamfer Distance', 'quaternion distance', 'translation distance', 'TRE']
     test_table = wandb.Table(columns=columns)
 
-    test_set = SceneflowDataset(mode="test",
-                                root=dataset_path,
-                                raycasted=True,
-                                augment_test=True,
-                                test_rotation_degree=rot_degree,
-                                test_rotation_axis=rot_axis
-                                )
+    save_folder = os.path.join(save_path, "rot-" + str(rot_degree) + "-ax-" + str(rot_axis))
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+
+    if rot_degree != 0:
+        test_set = SceneflowDataset(mode="test",
+                                    root=dataset_path,
+                                    raycasted=True,
+                                    augment_test=True,
+                                    test_rotation_degree=rot_degree,
+                                    test_rotation_axis=rot_axis
+                                    )
+    else:
+        test_set = SceneflowDataset(mode="test",
+                                    root=dataset_path,
+                                    raycasted=True
+                                    )
 
     results = []
     for i, data in enumerate(test_set):
 
-        results.append(run_cpd(data_batch=data,
-                               save_path=save_path,
-                               cpd_iterations=cpd_iterations,
-                               plot_iterations=True))
+        current_res = run_cpd(data_batch=data,
+                              save_path=save_folder,
+                              cpd_iterations=cpd_iterations,
+                              plot_iterations=False)
+
+        if not np.isnan(current_res['TRE']):
+            wandb.log(current_res)
+            wandb.log({'failure': 0})
+
+        else:
+            wandb.log({'failure': 1})
+        results.append(current_res)
 
     results = append_avg_metrics(results)
+
 
     for data in results:
         table_entry = [data[item] for item in columns]
@@ -435,6 +455,25 @@ def main(dataset_path, save_path, cpd_iterations, rot_degree, rot_axis, wandb_ke
     wandb.run.log_artifact(test_data_at)
 
 
+def run_experiment(args):
+    main(dataset_path=args.dataset_path,
+         save_path=args.save_path,
+         cpd_iterations=20,
+         rot_degree=args.test_rotation_degree,
+         rot_axis=args.test_rotation_axis)
+
+
+def train_wandb():
+    global args
+    with wandb.init(project='thesis', config=args):
+        config = wandb.config
+        args = SimpleNamespace(**config)
+        print('-------------------config---------------------')
+        print(args)
+
+        run_experiment(args)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
     #parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
@@ -442,16 +481,29 @@ if __name__ == '__main__':
     parser.add_argument('--wandb-key', type=str, required=True)
     parser.add_argument('--cpd-iterations', type=int, default=100)
     parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")
+    parser.add_argument('--wandb_sweep_id', type=str, default="ut6qm19z")
 
     args = parser.parse_args()
     #for cpd_iterations in range(10, 100, 10):
 
-    for axis in ["x", "y", "z"]:
-        for rotation in [-90, -70, -50, -20]:
-            main(dataset_path=args.dataset_path,
-                 save_path=args.save_path,
-                 cpd_iterations=20,
-                 rot_degree=rotation,
-                 rot_axis=axis,
-                 wandb_key=args.wandb_key,
-                 wandb_name = "cpd-rot" + str(rotation) + "-axis-" + axis)
+    wandb.login(key=args.wandb_key)
+
+    if args.wandb_sweep_id is not None:
+        wandb.agent(args.wandb_sweep_id, train_wandb, project='thesis')
+
+    # for axis in ["x", "y", "z"]:
+    #     for rotation in [-60, 40, -20]:
+    #         main(dataset_path=args.dataset_path,
+    #              save_path=args.save_path,
+    #              cpd_iterations=20,
+    #              rot_degree=rotation,
+    #              rot_axis=axis,
+    #              wandb_key=args.wandb_key,
+    #              wandb_name = "cpd-rot" + str(rotation) + "-axis-" + axis)
+    #
+    # # running with no rotation
+    # main(dataset_path=args.dataset_path,
+    #      save_path=args.save_path,
+    #      cpd_iterations=20,
+    #      wandb_key=args.wandb_key,
+    #      wandb_name="cpd-rot" + str(0))

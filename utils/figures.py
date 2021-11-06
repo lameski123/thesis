@@ -15,5 +15,5 @@ def plot_pointcloud(flow_pred, pc1, pc2, tag='', mode='training'):
     to_plot[pc1.shape[0] * 2:, 5] = 255  # blue
     tag = mode if tag == '' else f"{mode}_{tag}"
     wandb.log({
-        tag: wandb.Object3D({"type": "lidar/beta", "points": to_plot})
+        mode: wandb.Object3D({"type": "lidar/beta", "points": to_plot})
     })

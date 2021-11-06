@@ -35,7 +35,7 @@ def generate_all_in_folder(folder_path, save_dir):
 
 
 def generate_raycasted_db(db_path, output_dir):
-    for split in ["train", "val", "test"]:
+    for split in ["all_data"]:
 
         save_dir = os.path.join(output_dir, split)
         if not os.path.exists(save_dir):
@@ -48,24 +48,30 @@ def generate_raycasted_db(db_path, output_dir):
 
         for (image_name, label_name) in zip(us_images, us_labels):
 
-            label = np.array(Image.open(os.path.join(split_path, label_name)))
-            ray_casted_labels = ray_cast_image(label)
+            try:
+                labelpath = os.path.join(split_path, label_name)
+                label = np.array(Image.open(labelpath))
+                ray_casted_labels = ray_cast_image(label)
 
-            # do not save empty images for training
-            if np.sum(ray_casted_labels) == 0:
-                continue
+                # do not save empty images for training
+                if np.sum(ray_casted_labels) == 0:
+                    continue
 
-            ray_casted_labels = cv2.dilate(ray_casted_labels, np.ones((10, 10)), iterations=1)
+                ray_casted_labels = cv2.dilate(ray_casted_labels, np.ones((10, 10)), iterations=1)
 
-            image_save_path = os.path.join(save_dir, image_name)
-            label_save_path = os.path.join(save_dir, label_name)
+                image_save_path = os.path.join(save_dir, image_name)
+                label_save_path = os.path.join(save_dir, label_name)
 
-            copy2(os.path.join(split_path, image_name), image_save_path)
-            Image.fromarray(ray_casted_labels).save(label_save_path)
+                copy2(os.path.join(split_path, image_name), image_save_path)
+                Image.fromarray(ray_casted_labels).save(label_save_path)
+            except:
+                print("something wrong with: ", image_name)
 
 
-generate_all_in_folder(folder_path="C:/Users/maria/OneDrive/Desktop/data_images/us_full_label",
-                      save_dir="C:/Users/maria/OneDrive/Desktop/data_images/us_raycasted")
+generate_raycasted_db(db_path="E:/NAS/jane_project/unet_data/segmentation_network_data/full_labels",
+                       output_dir="E:/NAS/jane_project/unet_data/segmentation_network_data/ray_casted_db")
+
+
 
 # generate_raycasted_db(db_path="C:/Users/maria/OneDrive/Desktop/data_images/us_full_label",
 #                       output_dir="C:/Users/maria/OneDrive/Desktop/data_images/us_raycasted")

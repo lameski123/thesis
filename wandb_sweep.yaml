@@ -1,22 +1,10 @@
-program: train.py
-method: random
+program: compute_baseline.py
+method: grid
 metric:
   goal: minimize
   name: test_loss
 parameters:
-  lr:
-    value: 0.0002
-#    distribution: 'log_uniform'
-#    min: -10
-#    max: -4
-  loss:
-#    value: 'biomechanical'
-    values: ['biomechanical', 'rigidity', 'chamfer']
-  data_seed:
-    values: [0, 1, 2, 3, 4]
-  sweep_target_loss:
-    value: 'translation_distance'
-  loss_coeff:
-    distribution: 'log_uniform'
-    min: 0
-    max: 5
+  test_rotation_degree:
+    values: [20.0, 40.0, 60.0]
+  test_rotation_axis:
+    values: ['x', 'y', 'z']

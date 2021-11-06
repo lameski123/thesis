@@ -24,8 +24,8 @@ class FramePaired(BasePairedDataset):
         A = Image.open(A_path).convert('LA') if os.path.exists(A_path) else None  # condition
         B = Image.open(B_path).convert('LA') if os.path.exists(B_path) else None  # image
 
-        if self.split == "test" and A is None:
-            A = B.copy()  # this will simply be an invalid image
+        # if self.split == "test" and A is None:
+        #     A = B.copy()  # this will simply be an invalid image
 
             # apply the same transform to both A and B
         transform_params = get_params(self.hparams, A.size)

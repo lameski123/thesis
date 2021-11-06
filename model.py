@@ -16,13 +16,15 @@ class FlowNet3D(nn.Module):
         super(FlowNet3D,self).__init__()
 
         self.num_points = args.num_points
+        #self.num_features = args.num_features
+        self.num_features = 1
 
         RADIUS1 = 5.0
         RADIUS2 = 10.0
         RADIUS3 = 17.5
         RADIUS4 = 25.0
 
-        self.sa1 = PointNetSetAbstraction(npoint=1024, radius=RADIUS1, nsample=16, in_channel=3, mlp=[32, 32, 64], group_all=False)
+        self.sa1 = PointNetSetAbstraction(npoint=1024, radius=RADIUS1, nsample=16, in_channel=self.num_features, mlp=[32, 32, 64], group_all=False)
         self.sa2 = PointNetSetAbstraction(npoint=256, radius=RADIUS2, nsample=16, in_channel=64, mlp=[64, 64, 128], group_all=False)
 
         self.sa3 = PointNetSetAbstraction(npoint=64, radius=RADIUS3, nsample=8, in_channel=128, mlp=[128, 128, 256], group_all=False)
@@ -33,7 +35,7 @@ class FlowNet3D(nn.Module):
         self.su1 = PointNetSetUpConv(nsample=8, radius=24, f1_channel=256, f2_channel=512, mlp=[], mlp2=[256, 256], knn=True)
         self.su2 = PointNetSetUpConv(nsample=8, radius=12, f1_channel=256, f2_channel=256, mlp=[128, 128, 256], mlp2=[256], knn=True)
         self.su3 = PointNetSetUpConv(nsample=8, radius=6, f1_channel=64, f2_channel=256, mlp=[128, 128, 256], mlp2=[256], knn=True)
-        self.fp = PointNetFeaturePropogation(in_channel=256 + 3, mlp=[256, 256])
+        self.fp = PointNetFeaturePropogation(in_channel=256 + self.num_features, mlp=[256, 256])
 
         self.conv1 = nn.Conv1d(256, 128, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm1d(128)

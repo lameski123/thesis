@@ -5,7 +5,8 @@ import os
 
 
 def main(dataset_path, save_dir):
-    test_set = SceneflowDataset(mode="train", root=dataset_path, raycasted=True)
+    test_set = SceneflowDataset(mode="val", root=dataset_path, raycasted=True, augment_test=False)
+                                #test_rotation_degree=-90, test_rotation_axis="x")
 
     results = []
     for i, data in enumerate(test_set):
@@ -22,6 +23,6 @@ def main(dataset_path, save_dir):
         np.savetxt(os.path.join(save_folder, "tre_points.txt"), tre_points[:, 0:3])
         np.savetxt(os.path.join(save_folder, "constraints.txt"), source_pc[constraint, 0:3])
 
-
-main(dataset_path="E:/NAS/jane_project/flownet_data/nas_data/new_data_raycasted",
+main(#dataset_path="E:/NAS/jane_project/flownet_data/nas_data/new_data_raycasted",
+    dataset_path="E:/NAS/jane_project/flownet_data/nas_data/new_data_us",
      save_dir="C:/Users/maria/OneDrive/Desktop/data_check")

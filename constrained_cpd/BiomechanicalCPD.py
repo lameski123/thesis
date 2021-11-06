@@ -46,6 +46,7 @@ class BiomechanicalCpd(RigidRegistration):
         self.X_hat = self.X - np.tile(muX, (self.N, 1))
         # centered source point cloud
         Y_hat = self.Y - np.tile(muY, (self.M, 1))
+
         self.YPY = np.dot(np.transpose(self.P1), np.sum(np.multiply(Y_hat, Y_hat), axis=1))
 
         self.A = np.dot(np.transpose(self.X_hat), np.transpose(self.P))

@@ -135,57 +135,103 @@ def get_color_array(vertebrae_idxs):
     return color_array
 
 
-def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None):
-    net.eval()
-    total_loss = 0
-    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
-    quaternion_distance_total, translation_distance_total = 0.0, 0.0
+def test_single_phase(net, loss_opt, loss_coeff, color1, color2, constraint, flow, pc1, pc2, position1):
+    batch_size = pc1.size(0)
+    flow_pred = net(pc1, pc2, color1, color2)
+    bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size,
+                                                                            constraint,
+                                                                            flow,
+                                                                            flow_pred,
+                                                                            loss_opt,
+                                                                            pc1,
+                                                                            pc2,
+                                                                            position1,
+                                                                            loss_coeff)
+
+    return flow_pred, loss, {'bio_loss': bio_loss,
+                             'chamfer_loss': chamfer_loss,
+                             'loss': loss,
+                             'mse_loss': mse_loss,
+                             'rig_loss': rig_loss
+                             }
+
+def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None, two_stage_refinement=False):
 
     # Initializing the save folder if save_results is set to True
     result_path = os.path.join(args.test_output_path, args.exp_name, 'test_result/')
     if save_results:
         os.makedirs(result_path, exist_ok=True)
 
+
+    total_loss = 0
+    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
+    quaternion_distance_total, translation_distance_total = 0.0, 0.0
+
     test_metrics = []
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
 
-        batch_data = utils.read_batch_data(data)
-        if len(batch_data) == 9:
-            color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
-        else:
-            color1, color2, constraint, flow, pc1, pc2, position1, fn = batch_data
-            tre_points = None
-        source_color = get_color_array(position1)
+        net.eval()
+        color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = utils.read_batch_data(data)
+
+        if two_stage_refinement and color1.shape[1] > 1:
+            raise ValueError("Two stage refinement is only supported when 1-d colors are the input feature")
 
         batch_size = pc1.size(0)
-        flow_pred = net(pc1, pc2, color1, color2)
-        bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                ['all'], pc1, pc2, position1, args.loss_coeff)
+
+        # The first iteration will use the input color if only one stage is performed, otherwise it will assign the same
+        # color to all points in the source and target point clouds
+        flow_pred, loss, losses_dict = test_single_phase(net=net,
+                                                         loss_opt=['all'],
+                                                         loss_coeff=args.loss_coeff,
+                                                         color1=color1 * 0 + 1 if two_stage_refinement else color1,
+                                                         color2=color2 * 0 + 1 if two_stage_refinement else color2,
+                                                         constraint=constraint,
+                                                         flow=flow,
+                                                         pc1=pc1,
+                                                         pc2=pc2,
+                                                         position1=position1)
+        # Running the second stage prediction
+        if two_stage_refinement:
+            predicted_flow = flow_pred.clone().detach()
+            updated_pc1 = pc1 + predicted_flow
+            updated_gt_glow = flow - predicted_flow
+            source_color = color1
+
+            target_color = utils.estimate_target_color(updated_pc1, pc2, color1).cuda().contiguous().float()
+            flow_pred_it2, loss_iter2,  losses_dict = test_single_phase(net=net,
+                                                                        loss_opt=['all'],
+                                                                        loss_coeff=args.loss_coeff,
+                                                                        color1=source_color,
+                                                                        color2=target_color,
+                                                                        constraint=constraint,
+                                                                        flow=updated_gt_glow,
+                                                                        pc1=updated_pc1.clone().detach(),
+                                                                        pc2=pc2.clone().detach(),
+                                                                        position1=position1)
+
+            overall_predicted_flow = flow_pred + flow_pred_it2
+            loss += loss_iter2
+        else:
+            source_color = get_color_array(position1)
+            overall_predicted_flow = flow_pred
 
         metrics, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
-                                                                                       source_pc=pc1,
-                                                                                       source_color=source_color,
-                                                                                       gt_flow=flow,
-                                                                                       estimated_flow=flow_pred,
-                                                                                       tre_points=tre_points)
-        for item in metrics:
-            item["mse loss"] = mse_loss.item()
-            item["biomechanical loss"] = bio_loss.item()
-            item["rigidity loss"] = rig_loss.item()
-            item["Chamfer loss"] = chamfer_loss.item()
+                                                                                 source_pc=pc1,
+                                                                                 source_color = source_color if isinstance(source_color, np.ndarray) else torch.squeeze(source_color.detach(), dim=1),
+                                                                                 gt_flow=flow,
+                                                                                 estimated_flow=overall_predicted_flow.detach(),
+                                                                                 tre_points=tre_points)
 
         test_metrics.extend(metrics)
-        # Adding the network losses to the losses list of dicts
 
-        mse_loss_total += mse_loss.item() / len(test_loader)
-        bio_loss_total += bio_loss.item() / len(test_loader)
-        rig_loss_total += rig_loss.item() / len(test_loader)
-        chamfer_loss_total += chamfer_loss.item() / len(test_loader)
+        mse_loss_total += losses_dict['mse_loss'].item() / len(test_loader)
+        bio_loss_total += losses_dict['bio_loss'].item() / len(test_loader)
+        rig_loss_total += losses_dict['rig_loss'].item() / len(test_loader)
+        chamfer_loss_total += losses_dict['chamfer_loss'].item() / len(test_loader)
+        total_loss += losses_dict['loss'].item() / len(test_loader)
         quaternion_distance_total += quaternion_distance / len(test_loader)
         translation_distance_total += translation_distance / len(test_loader)
         tre_total += tre / len(test_loader)
-
-        total_loss += loss.item() / len(test_loader)
 
         if save_results and args.wandb_sweep_id is None:
             # Saving the point clouds
@@ -197,9 +243,9 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
                       predicted_pc=pc1 + flow_pred,
                       gt_pc=pc1 + flow)
 
-            # plotting on wandb
-            for j in range(test_loader.batch_size):
-                utils.plot_pointcloud(flow_pred[j:j+1, ...], pc1[j:j+1, ...], pc2[j:j+1, ...], tag=fn[j], mode='test')
+        # plotting on wandb
+        for j in range(test_loader.batch_size):
+            utils.plot_pointcloud(flow_pred[j:j+1, ...], pc1[j:j+1, ...], pc2[j:j+1, ...], tag=fn[j], mode='test')
 
     if wandb_table is not None:
         log_metrics_dict2wandb(test_metrics, wandb_table)

@@ -136,9 +136,6 @@ class BoneSegmentation(pl.LightningModule):
     # 6 Test Loop
     def test_step(self, test_batch, batch_idx):
 
-        if batch_idx == 166:
-            print()
-
         x = test_batch['Image']
         y_true = test_batch['Label']
         filename = test_batch['ImageName']

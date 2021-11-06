@@ -228,7 +228,7 @@ def _get_spine_number(path: str):
 
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted = False, augment=True, data_seed=0, **kwargs):
+                 raycasted = False, augment=True, data_seed=0, use_target_normalization_as_feature = True, **kwargs):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
@@ -248,14 +248,14 @@ class SceneflowDataset(Dataset):
         self.raycasted = raycasted
         self.augment = augment
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
-        self.use_target_normalization_as_feature = True
-        self.spine_splits = {"train": np.arange(1, 20), "val": [21], "test": [22]}
-        # self.spine_splits = {"train": np.arange(1, 22), "val": [21], "test": np.arange(1, 22)}
+        self.use_target_normalization_as_feature = use_target_normalization_as_feature
+        # self.spine_splits = {"train": np.arange(1, 20), "val": [21], "test": [22]}
+        self.spine_splits = {"train": np.arange(1, 22), "val": [22], "test": np.arange(1, 22)}
         train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed, )
-        self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
+        #self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
 
-        if "augment_test" in kwargs.keys():
+        if "augment_test" in kwargs.keys() and kwargs["augment_test"]:
             self.augment_test = kwargs["augment_test"]
             self.test_rotation_degree = kwargs["test_rotation_degree"]
             self.test_rotation_axis = kwargs["test_rotation_axis"]
@@ -426,6 +426,10 @@ class SceneflowDataset(Dataset):
     def __getitem__(self, index):
 
         file_id = os.path.split(self.data_path[index])[-1].split(".")[0]
+        print(file_id)
+
+        if file_id == "raycasted_spine10_ts_5_0":
+            print()
         constraint, flow, source_pc, target_pc = read_numpy_file(fp=self.data_path[index])
 
         # Getting the indexes to down-sample the source and target point clouds and the updated constraints indexes
@@ -469,10 +473,11 @@ class SceneflowDataset(Dataset):
             feature1 = normalized_source_pc[..., 3:]
             feature2 = normalized_target_pc[..., 3:]
         else:
-            pc1 = np.copy(normalized_source_pc)
-            pc2 = np.copy(normalized_target_pc)
-            feature1 = np.ones((normalized_source_pc.shape[0],))
-            feature2 = np.ones((normalized_source_pc.shape[0],))
+            pc1 = normalized_source_pc[..., :3]
+            pc2 = normalized_target_pc[..., :3]
+
+            feature1 = np.reshape(downsampled_source_pc[..., -1], (downsampled_source_pc.shape[0], 1))
+            feature2 = np.zeros((normalized_source_pc.shape[0], 1)) # target is colorless as we don't have the segmentation
 
         # getting the vertebrae indexes needed to compute the losses
         L1_source, L2_source, L3_source, L4_source, L5_source = vertebrae_surface(downsampled_source_pc[..., 3])

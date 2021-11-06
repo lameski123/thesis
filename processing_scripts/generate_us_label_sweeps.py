@@ -50,6 +50,8 @@ def get_point_cloud(data_list, transform_list, image_width, image_height):
     :param image_height: image physical height
     """
 
+    assert len(transform_list) == len(data_list)
+
     pc_list = []
     for T, image_path in zip(transform_list, data_list):
         image = np.squeeze(np.load(image_path))
@@ -64,8 +66,12 @@ def get_point_cloud(data_list, transform_list, image_width, image_height):
 def get_id_number_from_image_name(image_name):
     # e.g. spine10_ts_1_0_022.npz -> 22
 
-    # 1. spine10_ts_1_0_022.npz -> "022"
+    # 1. spine10_ts_1_0_022.npz -> "022"; spine1_ts_0_0__gt ->
     image_number = image_name.split("_")[-2].split(".")[0]
+
+    if image_number == '':
+        return 0
+
     return int(image_number)
 
 
@@ -84,7 +90,7 @@ def get_us_meta_info(us_sweep):
     meta_info = {'spacing': us_sweep[0].spacing,
                  'physical_width': us_sweep[0].width * us_sweep[0].spacing[0],
                  'physical_height': us_sweep[0].height * us_sweep[0].spacing[1],
-                 'transform_list': [us_sweep.matrix(i) for i in range(1, len(us_sweep))]}
+                 'transform_list': [us_sweep.matrix(i) for i in range(len(us_sweep))]}
 
     return meta_info
 
@@ -99,12 +105,12 @@ def main(unet_segmentation_path, us_sweep_dir, save_dir):
 
         for ts_name in ts_list:
 
-            us_filepath = os.path.join(us_sweep_dir, spine_id, "ts_" + ts_name) + ".imf"
+            us_filepath = os.path.join(us_sweep_dir, spine_id, ts_name) + ".imf"
             if not os.path.exists(us_filepath):
                 print("non existing file: ", us_filepath)
                 continue
 
-            us_sweep, = imfusion.open( os.path.join(us_sweep_dir, spine_id, "ts_" + ts_name) + ".imf")
+            us_sweep, = imfusion.open( os.path.join(us_sweep_dir, spine_id, ts_name) + ".imf")
             meta_data = get_us_meta_info(us_sweep)
 
             ordered_filenames = reorder_ts_data(os.path.join(unet_segmentation_path, spine_id, ts_name))
@@ -116,16 +122,16 @@ def main(unet_segmentation_path, us_sweep_dir, save_dir):
             save_folder = os.path.join(save_dir, spine_id)
             if not os.path.exists(save_folder):
                 os.makedirs(save_folder)
-            np.savetxt(os.path.join(save_folder, "raycasted_ts_" + ts_name + ".txt"), us_point_cloud)
+            np.savetxt(os.path.join(save_folder, "raycasted_" + ts_name + ".txt"), us_point_cloud)
 
             print()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
-    parser.add_argument('--dataset_path', type=str, default="E:/NAS/jane_project/unet_us_segmentation")
+    parser.add_argument('--dataset_path', type=str, default="E:/NAS/jane_project/unet_data/results_full")
     parser.add_argument('--us_sweep_dir', type=str, default="E:/NAS/jane_project/simulated_us")
-    parser.add_argument('--save_path', type=str, default="E:/NAS/jane_project/us_segmented_point_clouds")
+    parser.add_argument('--save_path', type=str, default="E:/NAS/jane_project/txt_files_us")
 
     args = parser.parse_args()
 
