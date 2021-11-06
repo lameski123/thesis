@@ -62,6 +62,8 @@ def update_args(args):
         args.loss_coeff = [args.loss_coeff]
     if isinstance(args.loss, str):
         args.loss = [args.loss]
+    if len(args.loss) == 1:  # break using commas
+        args.loss = args.loss[0].split(',')
     if len(args.loss_coeff) != 0:
         for coeff in args.loss_coeff:
             try:
