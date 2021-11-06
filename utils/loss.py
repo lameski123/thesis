@@ -15,6 +15,7 @@ def calculate_loss(batch_size, constraint, flow, flow_pred, loss_opt, pc1, pc2, 
     if "biomechanical" in loss_opt or 'all' in loss_opt:
         for idx in range(batch_size):
             bio_loss += biomechanical_loss(constraint, flow, flow_pred, idx, pc1, coeff=loss_coeff["biomechanical"])
+        bio_loss /= batch_size
         loss += bio_loss
         bio_loss /= loss_coeff["biomechanical"]
     if "rigidity" in loss_opt or 'all' in loss_opt:
