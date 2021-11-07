@@ -19,10 +19,19 @@ class FramePaired(BasePairedDataset):
         A_path = FramePaired.get_label_name(self.AB_paths[idx])  # label
         B_path = self.AB_paths[idx]  # image
 
+        if not os.path.exists(B_path):
+            print("path: ", B_path, " not existing")
+            #raise ValueError("non existing path " + B_path)
+
         image_name = os.path.split(B_path)[-1].replace(".png", "")
 
         A = Image.open(A_path).convert('LA') if os.path.exists(A_path) else None  # condition
         B = Image.open(B_path).convert('LA') if os.path.exists(B_path) else None  # image
+
+        if not os.path.exists(A_path):
+            print("path: ", A_path, " not existing")
+            A = B.copy()
+            #raise ValueError("non existing path " + A_path)
 
         # if self.split == "test" and A is None:
         #     A = B.copy()  # this will simply be an invalid image

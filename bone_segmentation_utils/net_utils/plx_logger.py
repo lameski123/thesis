@@ -114,9 +114,10 @@ class WandbLogger(BaseLogger):
         super().__init__(hparams)
 
         if hparams.group_name == "":
-            wandb.init(project="UnetTraining", dir=hparams.output_path)
+            wandb.init(project="UnetTraining", dir=hparams.output_path, mode="disabled")
         else:
-            wandb.init(project="UnetTraining", group=hparams.group_name, job_type="train", dir=hparams.output_path)
+            wandb.init(project="UnetTraining", group=hparams.group_name, job_type="train", dir=hparams.output_path,
+                       mode="disabled")
 
         self._config = wandb.config
 

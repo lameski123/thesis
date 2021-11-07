@@ -250,7 +250,7 @@ class SceneflowDataset(Dataset):
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
         self.use_target_normalization_as_feature = use_target_normalization_as_feature
         # self.spine_splits = {"train": np.arange(1, 20), "val": [21], "test": [22]}
-        self.spine_splits = {"train": np.arange(1, 22), "val": [22], "test": np.arange(1, 22)}
+        self.spine_splits = {"train": np.arange(1, 22), "val": [22], "test": np.arange(1, 23)}
         train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed, )
         #self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]

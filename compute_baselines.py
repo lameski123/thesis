@@ -404,6 +404,13 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
     return average_result
 
 
+def get_spine_id(file_id):
+    if "Average" not in file_id:
+        return file_id.split("_")[1]
+    else:
+        return "Average"
+
+
 def main(dataset_path, save_path, cpd_iterations, rot_degree=None, rot_axis=None):
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
@@ -437,6 +444,7 @@ def main(dataset_path, save_path, cpd_iterations, rot_degree=None, rot_axis=None
                               plot_iterations=False)
 
         if not np.isnan(current_res['TRE']):
+
             wandb.log(current_res)
             wandb.log({'failure': 0})
 
@@ -446,6 +454,18 @@ def main(dataset_path, save_path, cpd_iterations, rot_degree=None, rot_axis=None
 
     results = append_avg_metrics(results)
 
+    # Getting results for each spine
+    spine_ids = list(set([get_spine_id(item["id"]) for item in results]))
+
+    for test_metric in ['TRE', 'quaternion distance', 'translation distance']:
+
+        # plotting all the data
+        table = wandb.Table(data=[[result["id"], result[test_metric]] for result in results], columns=["data", test_metric])
+        wandb.log({test_metric + "-all": wandb.plot.bar(table, "data", test_metric)})
+
+        data = [[spine_id, np.nanmean([item[test_metric] for item in results if get_spine_id(item["id"]) == spine_id])] for spine_id in spine_ids]
+        table = wandb.Table(data=data, columns=["spine", test_metric])
+        wandb.log({test_metric + "spine-wise": wandb.plot.bar(table, "spine", test_metric)})
 
     for data in results:
         table_entry = [data[item] for item in columns]
@@ -458,14 +478,14 @@ def main(dataset_path, save_path, cpd_iterations, rot_degree=None, rot_axis=None
 def run_experiment(args):
     main(dataset_path=args.dataset_path,
          save_path=args.save_path,
-         cpd_iterations=20,
+         cpd_iterations=args.cpd_iterations,
          rot_degree=args.test_rotation_degree,
          rot_axis=args.test_rotation_axis)
 
 
 def train_wandb():
     global args
-    with wandb.init(project='thesis', config=args):
+    with wandb.init(project='cpd-baseline', config=args):
         config = wandb.config
         args = SimpleNamespace(**config)
         print('-------------------config---------------------')
@@ -479,9 +499,9 @@ if __name__ == '__main__':
     #parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
     parser.add_argument('--dataset_path', type=str, default="E:/NAS/jane_project/npz_data_raycasted")
     parser.add_argument('--wandb-key', type=str, required=True)
-    parser.add_argument('--cpd-iterations', type=int, default=100)
+    parser.add_argument('--cpd-iterations', type=int, default=20)
     parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")
-    parser.add_argument('--wandb_sweep_id', type=str, default="ut6qm19z")
+    parser.add_argument('--wandb_sweep_id', type=str, default="ljvde22k")
 
     args = parser.parse_args()
     #for cpd_iterations in range(10, 100, 10):
@@ -489,7 +509,10 @@ if __name__ == '__main__':
     wandb.login(key=args.wandb_key)
 
     if args.wandb_sweep_id is not None:
-        wandb.agent(args.wandb_sweep_id, train_wandb, project='thesis')
+        wandb.agent(args.wandb_sweep_id, train_wandb, project='cpd-baseline')
+
+    else:
+        train_wandb()
 
     # for axis in ["x", "y", "z"]:
     #     for rotation in [-60, 40, -20]:

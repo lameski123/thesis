@@ -57,6 +57,7 @@ def generate_us_labels_batch_file(src_labels_dir, src_ultrasound_dir, output_dir
 
         for ts in ts_list:
 
+
             input_labels_path = os.path.join(src_labels_dir, spine_id, ts + "_labelmap" + ".imf")
             input_us_path = os.path.join(src_ultrasound_dir, spine_id, ts + ".imf")
             image_name = spine_id + "_" + ts + "_"
@@ -72,7 +73,7 @@ train_spines = ["spine" + str(i) for i in range(1, 21)]
 val_spines = ["spine21"]
 test_spines = ["spine" + str(i) for i in range(1, 23)]
 
-train_spines = ["spine22"]
+train_spines = ["spine3"]
 generate_us_labels_batch_file(src_labels_dir="E:/NAS/jane_project/simulated_us_labelmaps",
                               src_ultrasound_dir="E:/NAS/jane_project/simulated_us",
                               output_dir="C:/Users/maria/OneDrive/Desktop/new_dat",
