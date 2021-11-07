@@ -140,14 +140,16 @@ def run_experiment(args):
 
 def train_wandb():
     global args
-    with wandb.init(project='spine_flownet', config=args):
+    argss_ = copy.deepcopy(args)
+    with wandb.init(project='spine_flownet', config=args_):
         config = wandb.config
-        args = SimpleNamespace(**config)
-        args = utils.update_args(args)
+        args_ = SimpleNamespace(**config)
+        args_ = utils.update_args(args_)
         print('-------------------config---------------------')
-        print(args)
+        print(args_)
 
-        run_experiment(args)
+        run_experiment(args_)
+
 
 
 def main():
