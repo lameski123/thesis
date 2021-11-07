@@ -140,7 +140,7 @@ def run_experiment(args):
 
 def train_wandb():
     global args
-    argss_ = copy.deepcopy(args)
+    args_ = copy.deepcopy(args)
     with wandb.init(project='spine_flownet', config=args_):
         config = wandb.config
         args_ = SimpleNamespace(**config)
