@@ -36,9 +36,11 @@ def create_parser():
     parser.add_argument('--loss_coeff', nargs='+', default=[], help='list of coefficients for each loss, in the same order as the loss')
     parser.add_argument('--coeff_rigidity', type=float, default=None, help='specific coeff for rigidity loss')
     parser.add_argument('--coeff_bio', type=float, default=None, help='specific coeff for biomechanic loss')
+    parser.add_argument('--coeff_chamfer', type=float, default=None, help='specific coeff for chamfer loss')
     parser.add_argument('--gpu_id', type=int, default=-1, metavar='S', help='GPU id (default: -1)')
     parser.add_argument('--wandb_key', type=str, required=True, help='key to login to your wandb account')
     parser.add_argument('--wandb_sweep_id', type=str, default=None, help='sweep id for wandb')
     parser.add_argument('--wandb_sweep_count', type=int, default=10, help='number of times sweeping the HP range')
     parser.add_argument('--sweep_target_loss', type=str, default='total_loss', choices=['total_loss', 'mse_loss', 'biomechanical_loss', 'rigid_loss', 'chamfer_loss', 'quaternion_distance', 'translation_distance'], help='which loss to use as target for sweep')
+    parser.add_argument('--train_set_size', type=int, default=None, help='set to use the subset of the training set')
     return parser

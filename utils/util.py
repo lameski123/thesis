@@ -80,6 +80,8 @@ def update_args(args):
         args.loss_coeff['rigidity'] = args.coeff_rigidity
     if args.coeff_bio is not None:
         args.loss_coeff['biomechanical'] = args.coeff_bio
+    if args.coeff_chamfer is not None:
+        args.loss_coeff['chamfer'] = args.coeff_chamfer
 
     try:
         from polyaxon_client.tracking import Experiment

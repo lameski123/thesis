@@ -124,7 +124,8 @@ def run_experiment(args):
     net.apply(utils.weights_init)
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
                                  raycasted=args.use_raycasted_data, augment=not args.no_augmentation,
-                                 data_seed=args.data_seed, test_id=args.test_id, max_rotation=args.max_rotation)
+                                 data_seed=args.data_seed, test_id=args.test_id,
+                                 max_rotation=args.max_rotation, train_set_size=args.train_set_size)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True, num_workers=args.num_workers)
     val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
                                raycasted=args.use_raycasted_data, splits=train_set.spine_splits,

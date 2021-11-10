@@ -229,7 +229,8 @@ def _get_spine_number(path: str):
 
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted=False, augment=True, data_seed=0, test_id=None, splits=None, **kwargs):
+                 raycasted=False, augment=True, data_seed=0, test_id=None, splits=None,
+                 train_set_size: int = None, **kwargs):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
@@ -260,6 +261,8 @@ class SceneflowDataset(Dataset):
             self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
         else:  # already divided the data
             self.spine_splits = splits
+        if mode == "train" and train_set_size is not None:
+            self.spine_splits[mode] = self.spine_splits[mode][:train_set_size]
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
 
         if "augment_test" in kwargs.keys():
