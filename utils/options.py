@@ -43,4 +43,6 @@ def create_parser():
     parser.add_argument('--wandb_sweep_count', type=int, default=10, help='number of times sweeping the HP range')
     parser.add_argument('--sweep_target_loss', type=str, default='total_loss', choices=['total_loss', 'mse_loss', 'biomechanical_loss', 'rigid_loss', 'chamfer_loss', 'quaternion_distance', 'translation_distance'], help='which loss to use as target for sweep')
     parser.add_argument('--train_set_size', type=int, default=None, help='set to use the subset of the training set')
+    parser.add_argument('--occlude_data', action='store_true', help='occlude data by removing points from the PC')
+    parser.add_argument('--occlude_ratio', type=int, default=0, metavar='S', help='Percentage of data to occlude')
     return parser

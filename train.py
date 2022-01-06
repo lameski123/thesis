@@ -125,11 +125,13 @@ def run_experiment(args):
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
                                  raycasted=args.use_raycasted_data, augment=not args.no_augmentation,
                                  data_seed=args.data_seed, test_id=args.test_id,
-                                 max_rotation=args.max_rotation, train_set_size=args.train_set_size)
+                                 max_rotation=args.max_rotation, train_set_size=args.train_set_size,
+                                 occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True, num_workers=args.num_workers)
     val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
                                raycasted=args.use_raycasted_data, splits=train_set.spine_splits,
-                               max_rotation=args.max_rotation, augment_test=args.augment_test)
+                               max_rotation=args.max_rotation, augment_test=args.augment_test,
+                               occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
     if torch.cuda.device_count() > 1 and args.gpu_id == -1:
         net = nn.DataParallel(net)

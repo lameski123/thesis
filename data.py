@@ -227,10 +227,19 @@ def _get_spine_number(path: str):
         return -1
 
 
+def add_occlusion(pc, occlusion_ratio=5):
+    min_z = np.min(pc, axis=0)[2]
+    max_z = np.max(pc, axis=0)[2]
+    size = (max_z - min_z) * occlusion_ratio/100
+    start_z = np.random.randint(low=min_z, high=max_z, size=1)
+    occluded = pc[(pc[:, 2] > start_z + size) | (pc[:, 2] < start_z), :]
+    return occluded
+
+
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
                  raycasted=False, augment=True, data_seed=0, test_id=None, splits=None,
-                 train_set_size: int = None, **kwargs):
+                 train_set_size: int = None, occlude_data=False, occlude_ratio=0, **kwargs):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
@@ -249,6 +258,8 @@ class SceneflowDataset(Dataset):
         self.root = root
         self.raycasted = raycasted
         self.augment = augment
+        self.occlude_data = occlude_data
+        self.occlude_ratio = occlude_ratio
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
 
         self.use_target_normalization_as_feature = True
@@ -264,6 +275,15 @@ class SceneflowDataset(Dataset):
         if mode == "train" and train_set_size is not None:
             self.spine_splits[mode] = self.spine_splits[mode][:train_set_size]
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
+
+        # only keep the largest deformations for the test set
+        if mode == 'test':
+            if 5 not in self.spine_splits[self.mode] and 6 not in self.spine_splits[self.mode]:
+                last_time_stamp = 20
+            else:
+                last_time_stamp = 19
+
+            self.data_path = [path for path in self.data_path if f'ts_{last_time_stamp}' in path]
 
         if "augment_test" in kwargs.keys():
             self.augment_test = kwargs["augment_test"]
@@ -450,6 +470,8 @@ class SceneflowDataset(Dataset):
         file_id = os.path.split(self.data_path[index])[-1].split(".")[0]
         constraint, flow, source_pc, target_pc = read_numpy_file(fp=self.data_path[index])
 
+        if self.occlude_data:
+            target_pc = add_occlusion(target_pc, occlusion_ratio=self.occlude_ratio)
         # Getting the indexes to down-sample the source and target point clouds and the updated constraints indexes
         sample_idx_source, downsampled_constraints_idx = \
             self.get_downsampled_idx(pc=source_pc, random_seed=100, constraints=constraint, sample_each_vertebra=True)
