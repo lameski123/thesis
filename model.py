@@ -13,7 +13,7 @@ import torch.nn.functional as F
 
 class FlowNet3D(nn.Module):
     def __init__(self,args):
-        super(FlowNet3D,self).__init__()
+        super(FlowNet3D, self).__init__()
 
         self.num_points = args.num_points
 
@@ -22,22 +22,24 @@ class FlowNet3D(nn.Module):
         RADIUS3 = 17.5
         RADIUS4 = 25.0
 
-        self.sa1 = PointNetSetAbstraction(npoint=1024, radius=RADIUS1, nsample=16, in_channel=3, mlp=[32, 32, 64], group_all=False)
-        self.sa2 = PointNetSetAbstraction(npoint=256, radius=RADIUS2, nsample=16, in_channel=64, mlp=[64, 64, 128], group_all=False)
+        num_filt = args.num_filt
 
-        self.sa3 = PointNetSetAbstraction(npoint=64, radius=RADIUS3, nsample=8, in_channel=128, mlp=[128, 128, 256], group_all=False)
-        self.sa4 = PointNetSetAbstraction(npoint=16, radius=RADIUS4, nsample=8, in_channel=256, mlp=[256, 256, 512], group_all=False)
+        self.sa1 = PointNetSetAbstraction(npoint=1024, radius=RADIUS1, nsample=16, in_channel=3, mlp=[num_filt//2, num_filt//2, num_filt], group_all=False)
+        self.sa2 = PointNetSetAbstraction(npoint=256, radius=RADIUS2, nsample=16, in_channel=num_filt, mlp=[num_filt, num_filt, num_filt * 2], group_all=False)
 
-        self.fe_layer = FlowEmbedding(radius=10.0, nsample=64, in_channel=128, mlp=[128, 128, 128], pooling='max', corr_func='concat', knn=True)
+        self.sa3 = PointNetSetAbstraction(npoint=64, radius=RADIUS3, nsample=8, in_channel=num_filt * 2, mlp=[num_filt * 2, num_filt * 2, num_filt * 4], group_all=False)
+        self.sa4 = PointNetSetAbstraction(npoint=16, radius=RADIUS4, nsample=8, in_channel=num_filt * 4, mlp=[num_filt * 4, num_filt * 4, num_filt * 8], group_all=False)
 
-        self.su1 = PointNetSetUpConv(nsample=8, radius=24, f1_channel=256, f2_channel=512, mlp=[], mlp2=[256, 256], knn=True)
-        self.su2 = PointNetSetUpConv(nsample=8, radius=12, f1_channel=256, f2_channel=256, mlp=[128, 128, 256], mlp2=[256], knn=True)
-        self.su3 = PointNetSetUpConv(nsample=8, radius=6, f1_channel=64, f2_channel=256, mlp=[128, 128, 256], mlp2=[256], knn=True)
-        self.fp = PointNetFeaturePropogation(in_channel=256 + 3, mlp=[256, 256])
+        self.fe_layer = FlowEmbedding(radius=10.0, nsample=64, in_channel=num_filt * 2, mlp=[num_filt * 2, num_filt * 2, num_filt * 2], pooling='max', corr_func='concat', knn=True)
 
-        self.conv1 = nn.Conv1d(256, 128, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm1d(128)
-        self.conv2 = nn.Conv1d(128, 3, kernel_size=1, bias=True)
+        self.su1 = PointNetSetUpConv(nsample=8, radius=24, f1_channel=num_filt * 4, f2_channel=num_filt * 8, mlp=[], mlp2=[num_filt * 4, num_filt * 4], knn=True)
+        self.su2 = PointNetSetUpConv(nsample=8, radius=12, f1_channel=num_filt * 4, f2_channel=num_filt * 4, mlp=[num_filt * 2, num_filt * 2, num_filt * 4], mlp2=[num_filt * 4], knn=True)
+        self.su3 = PointNetSetUpConv(nsample=8, radius=6, f1_channel=num_filt, f2_channel=num_filt * 4, mlp=[num_filt * 2, num_filt * 2, num_filt * 4], mlp2=[num_filt * 4], knn=True)
+        self.fp = PointNetFeaturePropogation(in_channel=num_filt * 4 + 3, mlp=[num_filt * 4, num_filt * 4])
+
+        self.conv1 = nn.Conv1d(num_filt * 4, num_filt * 2, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm1d(num_filt * 2)
+        self.conv2 = nn.Conv1d(num_filt * 2, 3, kernel_size=1, bias=True)
         
     def forward(self, pc1, pc2, feature1, feature2):
         l1_pc1, l1_feature1 = self.sa1(pc1, feature1)

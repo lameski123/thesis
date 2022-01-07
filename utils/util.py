@@ -99,3 +99,7 @@ def update_args(args):
         args.test_output_path = args.checkpoints_dir
 
     return args
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

@@ -122,6 +122,11 @@ def run_experiment(args):
         torch.cuda.set_device(args.gpu_id)
     net = FlowNet3D(args).cuda()
     net.apply(utils.weights_init)
+
+    print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+    print(f'%%% number of parameters: {utils.count_parameters(net):.3E}')
+    print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
                                  raycasted=args.use_raycasted_data, augment=not args.no_augmentation,
                                  data_seed=args.data_seed, test_id=args.test_id,
