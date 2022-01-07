@@ -36,17 +36,19 @@ def train(args, net, train_loader, val_loader, textio):
 
     best_test_loss = np.inf
     best_net = None
+    report_val_loss = False
     for epoch in range(args.epochs):
         textio.cprint('==epoch: %d, learning rate: %f==' % (epoch, opt.param_groups[0]['lr']))
         train_losses = train_one_epoch(net, train_loader, opt, args.loss, args)
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
         with torch.no_grad():
-            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None)
+            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None, max_num_batch=40)
         test_loss = test_losses['TRE']
         textio.cprint('mean test loss: %f' % test_loss)
         if best_test_loss >= test_loss:
             best_test_loss = test_loss
+            report_val_loss = True
             best_net = copy.deepcopy(net)
             textio.cprint('best test loss till now: %f' % test_loss)
             if torch.cuda.device_count() > 1 and args.gpu_id == -1:
@@ -55,7 +57,12 @@ def train(args, net, train_loader, val_loader, textio):
                 torch.save(net.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
 
         scheduler.step()
-        wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses[args.sweep_target_loss]})
+
+        if report_val_loss:
+            wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses[args.sweep_target_loss]})
+            report_val_loss = False
+        else:
+            wandb.log({'Train': train_losses, 'Validation': test_losses})
 
         args.lr = scheduler.get_last_lr()[0]
     return best_net
@@ -116,29 +123,36 @@ def run_experiment(args):
     net = FlowNet3D(args).cuda()
     net.apply(utils.weights_init)
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
-                                 raycasted=args.use_raycasted_data, augment=not args.no_augmentation, data_seed=args.data_seed)
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True)
+                                 raycasted=args.use_raycasted_data, augment=not args.no_augmentation,
+                                 data_seed=args.data_seed, test_id=args.test_id,
+                                 max_rotation=args.max_rotation, train_set_size=args.train_set_size,
+                                 occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True, num_workers=args.num_workers)
     val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
-                               raycasted=args.use_raycasted_data, data_seed=args.data_seed)
-    val_loader = DataLoader(val_set, batch_size=1, drop_last=False)
+                               raycasted=args.use_raycasted_data, splits=train_set.spine_splits,
+                               max_rotation=args.max_rotation, augment_test=args.augment_test,
+                               occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
+    val_loader = DataLoader(val_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
     if torch.cuda.device_count() > 1 and args.gpu_id == -1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
     best_net = train(args, net, train_loader, val_loader, textio)
     # test after training
-    test(args, best_net, textio)
+    test(args, best_net, textio, spine_splits=train_set.spine_splits)
 
 
 def train_wandb():
     global args
-    with wandb.init(project='spine_flownet', config=args):
+    args_ = copy.deepcopy(args)
+    with wandb.init(project='spine_flownet', config=args_):
         config = wandb.config
-        args = SimpleNamespace(**config)
-        args = utils.update_args(args)
+        args_ = SimpleNamespace(**config)
+        args_ = utils.update_args(args_)
         print('-------------------config---------------------')
-        print(args)
+        print(args_)
 
-        run_experiment(args)
+        run_experiment(args_)
+
 
 
 def main():

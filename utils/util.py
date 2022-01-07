@@ -62,6 +62,8 @@ def update_args(args):
         args.loss_coeff = [args.loss_coeff]
     if isinstance(args.loss, str):
         args.loss = [args.loss]
+    if len(args.loss) == 1:  # break using commas
+        args.loss = args.loss[0].split(',')
     if len(args.loss_coeff) != 0:
         for coeff in args.loss_coeff:
             try:
@@ -74,6 +76,12 @@ def update_args(args):
     args.loss_coeff = {}
     for loss, coeff in zip(args.loss, coeffs):
         args.loss_coeff[loss] = coeff
+    if args.coeff_rigidity is not None:
+        args.loss_coeff['rigidity'] = args.coeff_rigidity
+    if args.coeff_bio is not None:
+        args.loss_coeff['biomechanical'] = args.coeff_bio
+    if args.coeff_chamfer is not None:
+        args.loss_coeff['chamfer'] = args.coeff_chamfer
 
     try:
         from polyaxon_client.tracking import Experiment

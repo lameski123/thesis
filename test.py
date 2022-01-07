@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import datetime
 import os
 
 import numpy as np
@@ -135,7 +136,7 @@ def get_color_array(vertebrae_idxs):
     return color_array
 
 
-def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None):
+def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None, max_num_batch=-1):
     net.eval()
     total_loss = 0
     mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -147,9 +148,12 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
         os.makedirs(result_path, exist_ok=True)
 
     test_metrics = []
+    timespans = []
     for i, data in tqdm(enumerate(test_loader), total=len(test_loader)):
-
+        if max_num_batch != -1 and i >= max_num_batch:
+            break
         batch_data = utils.read_batch_data(data)
+        start_time = datetime.datetime.now()
         if len(batch_data) == 9:
             color1, color2, constraint, flow, pc1, pc2, position1, fn, tre_points = batch_data
         else:
@@ -160,8 +164,9 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
         batch_size = pc1.size(0)
         flow_pred = net(pc1, pc2, color1, color2)
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
-                                                                                ['all'], pc1, pc2, position1, args.loss_coeff)
+                                                                                ['all'], pc1, pc2, position1, args.loss_coeff.copy())
 
+        timespans.append((datetime.datetime.now()-start_time).total_seconds())
         metrics, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
                                                                                        source_pc=pc1,
                                                                                        source_color=source_color,
@@ -208,6 +213,9 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
               'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total,
               'quaternion_distance': quaternion_distance_total, 'translation_distance': translation_distance_total,
               'TRE': tre_total}
+
+    print(f'test duration is {np.mean(timespans)}')
+
     return losses
 
 
@@ -253,11 +261,15 @@ def main():
     test(args, net, textio)
 
 
-def test(args, net, textio):
+def test(args, net, textio, spine_splits=None):
 
     test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path,
-                                raycasted=args.use_raycasted_data, data_seed=args.data_seed)
-    test_loader = DataLoader(test_set, batch_size=1, drop_last=False)
+                                raycasted=args.use_raycasted_data, data_seed=args.data_seed,
+                                test_id=args.test_id, splits=spine_splits,
+                                max_rotation=args.max_rotation, augment_test=args.augment_test,
+                                test_rotation_axis=args.test_rotation_axis, test_rotation_degree=args.max_rotation,
+                                occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
+    test_loader = DataLoader(test_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
 
     test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
 
@@ -268,7 +280,7 @@ def test(args, net, textio):
     with torch.no_grad():
         test_loss = test_one_epoch(net, test_loader, args=args, save_results=True, wandb_table=test_table)
 
-    wandb.log({'test_loss': test_loss['TRE']})
+    wandb.log({'Test': test_loss})
 
     textio.cprint('==FINAL TEST==')
     textio.cprint(f'mean test loss: {test_loss}')

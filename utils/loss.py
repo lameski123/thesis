@@ -6,15 +6,18 @@ import torch.nn.functional as F
 
 def calculate_loss(batch_size, constraint, flow, flow_pred, loss_opt, pc1, pc2, position1, loss_coeff):
     if 'all' in loss_opt:
-        for loss in ["biomechanical", "rigidity", "chamfer"]:
+        for loss in ["biomechanical", "rigidity", "chamfer", 'mse']:
             if loss not in loss_coeff.keys():
                 loss_coeff[loss] = 1.0
-    mse_loss = F.mse_loss(flow_pred.float(), flow.float())
-    loss = torch.clone(mse_loss)
-    bio_loss, rig_loss, cham_loss = torch.zeros_like(loss), torch.zeros_like(loss), torch.zeros_like(loss)
+    loss = torch.tensor([0.0], device=flow.device, dtype=flow.dtype)
+    bio_loss, rig_loss, cham_loss, mse_loss = torch.zeros_like(loss), torch.zeros_like(loss), torch.zeros_like(loss), torch.zeros_like(loss)
+    if "mse" in loss_opt or 'all' in loss_opt:
+        mse_loss = F.mse_loss(flow_pred.float(), flow.float())
+        loss += mse_loss
     if "biomechanical" in loss_opt or 'all' in loss_opt:
         for idx in range(batch_size):
             bio_loss += biomechanical_loss(constraint, flow, flow_pred, idx, pc1, coeff=loss_coeff["biomechanical"])
+        bio_loss /= batch_size
         loss += bio_loss
         bio_loss /= loss_coeff["biomechanical"]
     if "rigidity" in loss_opt or 'all' in loss_opt:

@@ -2,7 +2,7 @@ program: train.py
 method: random
 metric:
   goal: minimize
-  name: test_loss
+  name: val_loss
 parameters:
   lr:
     value: 0.0002
@@ -11,12 +11,12 @@ parameters:
 #    max: -4
   loss:
 #    value: 'biomechanical'
-    values: ['biomechanical', 'rigidity', 'chamfer']
+    values: ['rigidity']
   data_seed:
     values: [0, 1, 2, 3, 4]
   sweep_target_loss:
-    value: 'translation_distance'
+    value: 'TRE'
   loss_coeff:
     distribution: 'log_uniform'
     min: 0
-    max: 5
+    max: 4

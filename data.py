@@ -6,6 +6,7 @@ import os
 import sys
 import glob
 import h5py
+import numpy
 import numpy as np
 from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
@@ -100,8 +101,8 @@ def vertebrae_surface(surface):
     return L1, L2, L3, L4, L5
 
 
-def get_random_rotation():
-    angle_target = np.random.randint(-20, 20)
+def get_random_rotation(max_rotation=20.0):
+    angle_target = np.random.randint(-max_rotation, max_rotation)
 
     xyz = np.random.choice(["x", "y", "z"])
 
@@ -118,7 +119,7 @@ def apply_random_rotation(pc, rotation_center=np.array([0, 0, 0]), r=None):
     return rotated_pc + rotation_center
 
 
-def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
+def augment_test(flow, pc1, pc2, tre_points, max_rotation=20.0, rotation=0, axis=None):
     # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
     augmented_pc1 = np.zeros(pc1.shape)
     augmented_pc2 = np.zeros(pc2.shape)
@@ -131,16 +132,17 @@ def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
         augmented_pc2[:, -1] = pc2[:, -1]
         pc2 = pc2[:, :3]
 
-    angle_target = rotation
-    xyz = axis
-
     # ###### Augmenting the data #######
     # The ground truth position of the deformed source
     gt_target = pc1 + flow
 
     # rotate the source
-    r = Rotation.from_euler(xyz, angle_target * np.pi / 180)
-    r = r.as_matrix()
+
+    if axis is None:
+        r = get_random_rotation(max_rotation)
+    else:
+        r = Rotation.from_euler(axis, rotation * np.pi / 180)
+        r = r.as_matrix()
     pc1 = apply_random_rotation(pc1, r=r, rotation_center=np.mean(pc1, axis=0))
     tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], r=r, rotation_center=np.mean(pc1, axis=0))
 
@@ -153,7 +155,7 @@ def augment_test(flow, pc1, pc2, tre_points, rotation, axis):
     return flow, augmented_pc1, augmented_pc2, tre_points
 
 
-def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
+def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5, max_rotation=20):
     # ###### Generating the arrays where to store the augmented data - the fourth dimension remains constant #######
     augmented_pc1 = np.zeros(pc1.shape)
     augmented_pc2 = np.zeros(pc2.shape)
@@ -174,7 +176,7 @@ def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     if np.random.random() < augmentation_prob:
         # rotate the source about its centroid randomly and update flow accordingly
 
-        r = get_random_rotation()
+        r = get_random_rotation(max_rotation)
         pc1 = apply_random_rotation(pc1, r=r, rotation_center=np.mean(pc1, axis=0))
         tre_points[:, 0:3] = apply_random_rotation(tre_points[:, 0:3], r=r, rotation_center=np.mean(pc1, axis=0))
 
@@ -182,7 +184,7 @@ def augment_data(flow, pc1, pc2, tre_points, augmentation_prob=0.5):
     if np.random.random() < augmentation_prob:
         # apply the same rotation to ground truth target and pc2 (a rotation about the target centroid)
         # and update flow accordingly
-        r = get_random_rotation()
+        r = get_random_rotation(max_rotation)
         pc2 = apply_random_rotation(pc2, r=r, rotation_center=np.mean(pc2, axis=0))
         gt_target = apply_random_rotation(gt_target, r=r, rotation_center=np.mean(pc2, axis=0))
 
@@ -226,9 +228,40 @@ def _get_spine_number(path: str):
         return -1
 
 
+def define_occlusion_indices(pc: numpy.ndarray, occlusion_size, main_axis):
+    z_values = np.unique(pc[:, main_axis].astype(np.int32))
+    z_values = [z for z in z_values if z + int(occlusion_size) in z_values]
+    ind_z = np.random.randint(low=0, high=len(z_values))
+    return z_values[ind_z]
+
+
+def find_main_axis(pc):
+    min_ = np.min(pc, axis=0)
+    max_ = np.max(pc, axis=0)
+    main_axis = np.argmax(max_ - min_)
+    return main_axis
+
+
+def add_occlusion(pc: numpy.ndarray, occlusion_ratio):
+    max_one_loc_occlusion = 10
+    number_of_occlusions = int((occlusion_ratio - 0.0001) // max_one_loc_occlusion + 1)  # don't occlude more than 10 percent from one location
+    occluded = pc.copy()
+    main_axis = find_main_axis(pc)
+    min_ = np.min(occluded, axis=0)[main_axis]
+    max_ = np.max(occluded, axis=0)[main_axis]
+    for i in range(number_of_occlusions):
+        # start_z = np.random.randint(low=min_z, high=max_z, size=1)
+        ratio = max_one_loc_occlusion if i < (number_of_occlusions - 1) else occlusion_ratio - (i * max_one_loc_occlusion)
+        size = (max_ - min_) * ratio / 100
+        start_ = define_occlusion_indices(occluded, size, main_axis)
+        occluded = occluded[(occluded[:, main_axis] > start_ + size) | (occluded[:, main_axis] < start_), :]
+    return occluded
+
+
 class SceneflowDataset(Dataset):
     def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
-                 raycasted = False, augment=True, data_seed=0, **kwargs):
+                 raycasted=False, augment=True, data_seed=0, test_id=None, splits=None,
+                 train_set_size: int = None, occlude_data=False, occlude_ratio=0, **kwargs):
         """
         :param npoints: number of points of input point clouds
         :param root: folder of data in .npz format
@@ -247,29 +280,60 @@ class SceneflowDataset(Dataset):
         self.root = root
         self.raycasted = raycasted
         self.augment = augment
+        self.occlude_data = occlude_data
+        self.occlude_ratio = occlude_ratio
         self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
+
         self.use_target_normalization_as_feature = True
-        self.spine_splits = {"train": np.arange(1, 20), "val": [21], "test": [22]}
-        # self.spine_splits = {"train": np.arange(1, 22), "val": [21], "test": np.arange(1, 22)}
-        train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed, )
-        self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
+
+        if splits is None:
+            if test_id is None:
+                train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed)
+            else:
+                train_idx, val_idx, test_idx = self._leave_one_out_indices(test_id)
+            self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
+        else:  # already divided the data
+            self.spine_splits = splits
+        if mode == "train" and train_set_size is not None:
+            self.spine_splits[mode] = self.spine_splits[mode][:train_set_size]
         self.data_path = [path for path in self.data_path if _get_spine_number(path) in self.spine_splits[self.mode]]
+
+        # only keep the largest deformations for the test set
+        if mode == 'test':
+            if 5 not in self.spine_splits[self.mode] and 6 not in self.spine_splits[self.mode]:
+                last_time_stamp = 20
+            else:
+                last_time_stamp = 19
+
+            self.data_path = [path for path in self.data_path if f'ts_{last_time_stamp}' in path]
 
         if "augment_test" in kwargs.keys():
             self.augment_test = kwargs["augment_test"]
-            self.test_rotation_degree = kwargs["test_rotation_degree"]
-            self.test_rotation_axis = kwargs["test_rotation_axis"]
+            if "test_rotation_degree" in kwargs.keys() and "test_rotation_axis" in kwargs.keys():
+                self.test_rotation_degree = kwargs["test_rotation_degree"]
+                self.test_rotation_axis = kwargs["test_rotation_axis"]
+            else:
+                self.test_rotation_degree = None
+                self.test_rotation_axis = None
         else:
             self.augment_test = False
             self.test_rotation_degree = None
             self.test_rotation_axis = None
 
+        if "max_rotation" in kwargs.keys():
+            self.max_rotation = kwargs['max_rotation']
+        else:
+            self.max_rotation = 20.0
+
         # #in case we want to test on different data
         # if self.train==False:
         #     self.root = "./spine_clouds"
         # else:
-
-        # train
+        
+    def _leave_one_out_indices(self, test_id: int, num_spines=22):
+        indices = np.random.permutation(num_spines) + 1
+        indices = [index for index in indices if index != test_id]
+        return indices[:-3], indices[-3:], [test_id]
 
     def _get_sets_indices(self, seed: int, num_spines=22):
         assert seed >= 0 and seed < 5, 'we have only 5 different sets for indices'
@@ -282,7 +346,7 @@ class SceneflowDataset(Dataset):
 
         # np.random.seed(seed)
         # indices = np.random.permutation(num_spines)
-        return indices[seed, :-3], indices[seed, -3:-1], indices[seed, -1:]
+        return indices[seed, :-4], indices[seed, -4:-1], indices[seed, -1:]
 
     def get_tre_points(self, filename):
         """
@@ -428,6 +492,8 @@ class SceneflowDataset(Dataset):
         file_id = os.path.split(self.data_path[index])[-1].split(".")[0]
         constraint, flow, source_pc, target_pc = read_numpy_file(fp=self.data_path[index])
 
+        if self.occlude_data:
+            target_pc = add_occlusion(target_pc, occlusion_ratio=self.occlude_ratio)
         # Getting the indexes to down-sample the source and target point clouds and the updated constraints indexes
         sample_idx_source, downsampled_constraints_idx = \
             self.get_downsampled_idx(pc=source_pc, random_seed=100, constraints=constraint, sample_each_vertebra=True)
@@ -444,16 +510,17 @@ class SceneflowDataset(Dataset):
         if self.mode == "train" and self.augment:
             downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
                 augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points,
-                             augmentation_prob=0.5)
+                             augmentation_prob=0.5, max_rotation=self.max_rotation)
 
-        if self.mode == "test" and self.augment_test:
+        if (self.mode == "test" or self.mode == "val") and self.augment_test:
             downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
                 augment_test(flow=downsampled_flow,
                              pc1=downsampled_source_pc,
                              pc2=downsampled_target_pc,
                              tre_points=tre_points,
                              rotation=self.test_rotation_degree,
-                             axis=self.test_rotation_axis)
+                             axis=self.test_rotation_axis,
+                             max_rotation=self.max_rotation)
 
         # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
         # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
@@ -474,6 +541,7 @@ class SceneflowDataset(Dataset):
             feature1 = np.ones((normalized_source_pc.shape[0],))
             feature2 = np.ones((normalized_source_pc.shape[0],))
 
+
         # getting the vertebrae indexes needed to compute the losses
         L1_source, L2_source, L3_source, L4_source, L5_source = vertebrae_surface(downsampled_source_pc[..., 3])
         vertebrae_point_inx_src = [L1_source, L2_source, L3_source, L4_source, L5_source]
@@ -491,15 +559,29 @@ class SceneflowDataset(Dataset):
         surface1 = np.copy(pos1)[:, 3]
         # specific for vertebrae: sampling 4096 points
         L1 = np.argwhere(surface1 == 1).squeeze()
-        sample_idx1 = np.random.choice(L1, n_points, replace=False)
+        sample_idx1 = np.random.choice(L1, n_points, replace=L1.shape[0] <= n_points)
         L2 = np.argwhere(surface1 == 2).squeeze()
-        sample_idx2 = np.random.choice(L2, n_points, replace=False)
+        sample_idx2 = np.random.choice(L2, n_points, replace=L2.shape[0] <= n_points)
         L3 = np.argwhere(surface1 == 3).squeeze()
-        sample_idx3 = np.random.choice(L3, n_points, replace=False)
+        sample_idx3 = np.random.choice(L3, n_points, replace=L3.shape[0] <= n_points)
         L4 = np.argwhere(surface1 == 4).squeeze()
-        sample_idx4 = np.random.choice(L4, n_points, replace=False)
+        sample_idx4 = np.random.choice(L4, n_points, replace=L4.shape[0] <= n_points)
         L5 = np.argwhere(surface1 == 5).squeeze()
-        sample_idx5 = np.random.choice(L5, n_points, replace=False)
+        sample_idx5 = np.random.choice(L5, n_points, replace=L5.shape[0] <= n_points)
+
+        # vert_point_count = [len(np.argwhere(surface1 == i + 1)) for i in range(5)]
+        #
+        # L1 = np.argwhere(surface1 == 1).squeeze()
+        # sample_idx1 = np.random.choice(L1, vert_point_count[0] * self.npoints // pos1.shape[0], replace=False)
+        # L2 = np.argwhere(surface1 == 2).squeeze()
+        # sample_idx2 = np.random.choice(L2, vert_point_count[1] * self.npoints // pos1.shape[0], replace=False)
+        # L3 = np.argwhere(surface1 == 3).squeeze()
+        # sample_idx3 = np.random.choice(L3, vert_point_count[2] * self.npoints // pos1.shape[0], replace=False)
+        # L4 = np.argwhere(surface1 == 4).squeeze()
+        # sample_idx4 = np.random.choice(L4, vert_point_count[3] * self.npoints // pos1.shape[0], replace=False)
+        # L5 = np.argwhere(surface1 == 5).squeeze()
+        # res = self.npoints - np.sum([vert_point_count[i] * self.npoints // pos1.shape[0] for i in range(4)])
+        # sample_idx5 = np.random.choice(L5, res, replace=False)
         return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
 
     def __len__(self):
