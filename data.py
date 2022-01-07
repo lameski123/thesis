@@ -6,6 +6,7 @@ import os
 import sys
 import glob
 import h5py
+import numpy
 import numpy as np
 from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
@@ -227,12 +228,33 @@ def _get_spine_number(path: str):
         return -1
 
 
-def add_occlusion(pc, occlusion_ratio=5):
-    min_z = np.min(pc, axis=0)[2]
-    max_z = np.max(pc, axis=0)[2]
-    size = (max_z - min_z) * occlusion_ratio/100
-    start_z = np.random.randint(low=min_z, high=max_z, size=1)
-    occluded = pc[(pc[:, 2] > start_z + size) | (pc[:, 2] < start_z), :]
+def define_occlusion_indices(pc: numpy.ndarray, occlusion_size, main_axis):
+    z_values = np.unique(pc[:, main_axis].astype(np.int32))
+    z_values = [z for z in z_values if z + int(occlusion_size) in z_values]
+    ind_z = np.random.randint(low=0, high=len(z_values))
+    return z_values[ind_z]
+
+
+def find_main_axis(pc):
+    min_ = np.min(pc, axis=0)
+    max_ = np.max(pc, axis=0)
+    main_axis = np.argmax(max_ - min_)
+    return main_axis
+
+
+def add_occlusion(pc: numpy.ndarray, occlusion_ratio):
+    max_one_loc_occlusion = 10
+    number_of_occlusions = int((occlusion_ratio - 0.0001) // max_one_loc_occlusion + 1)  # don't occlude more than 10 percent from one location
+    occluded = pc.copy()
+    main_axis = find_main_axis(pc)
+    min_ = np.min(occluded, axis=0)[main_axis]
+    max_ = np.max(occluded, axis=0)[main_axis]
+    for i in range(number_of_occlusions):
+        # start_z = np.random.randint(low=min_z, high=max_z, size=1)
+        ratio = max_one_loc_occlusion if i < (number_of_occlusions - 1) else occlusion_ratio - (i * max_one_loc_occlusion)
+        size = (max_ - min_) * ratio / 100
+        start_ = define_occlusion_indices(occluded, size, main_axis)
+        occluded = occluded[(occluded[:, main_axis] > start_ + size) | (occluded[:, main_axis] < start_), :]
     return occluded
 
 
@@ -537,15 +559,29 @@ class SceneflowDataset(Dataset):
         surface1 = np.copy(pos1)[:, 3]
         # specific for vertebrae: sampling 4096 points
         L1 = np.argwhere(surface1 == 1).squeeze()
-        sample_idx1 = np.random.choice(L1, n_points, replace=False)
+        sample_idx1 = np.random.choice(L1, n_points, replace=L1.shape[0] <= n_points)
         L2 = np.argwhere(surface1 == 2).squeeze()
-        sample_idx2 = np.random.choice(L2, n_points, replace=False)
+        sample_idx2 = np.random.choice(L2, n_points, replace=L2.shape[0] <= n_points)
         L3 = np.argwhere(surface1 == 3).squeeze()
-        sample_idx3 = np.random.choice(L3, n_points, replace=False)
+        sample_idx3 = np.random.choice(L3, n_points, replace=L3.shape[0] <= n_points)
         L4 = np.argwhere(surface1 == 4).squeeze()
-        sample_idx4 = np.random.choice(L4, n_points, replace=False)
+        sample_idx4 = np.random.choice(L4, n_points, replace=L4.shape[0] <= n_points)
         L5 = np.argwhere(surface1 == 5).squeeze()
-        sample_idx5 = np.random.choice(L5, n_points, replace=False)
+        sample_idx5 = np.random.choice(L5, n_points, replace=L5.shape[0] <= n_points)
+
+        # vert_point_count = [len(np.argwhere(surface1 == i + 1)) for i in range(5)]
+        #
+        # L1 = np.argwhere(surface1 == 1).squeeze()
+        # sample_idx1 = np.random.choice(L1, vert_point_count[0] * self.npoints // pos1.shape[0], replace=False)
+        # L2 = np.argwhere(surface1 == 2).squeeze()
+        # sample_idx2 = np.random.choice(L2, vert_point_count[1] * self.npoints // pos1.shape[0], replace=False)
+        # L3 = np.argwhere(surface1 == 3).squeeze()
+        # sample_idx3 = np.random.choice(L3, vert_point_count[2] * self.npoints // pos1.shape[0], replace=False)
+        # L4 = np.argwhere(surface1 == 4).squeeze()
+        # sample_idx4 = np.random.choice(L4, vert_point_count[3] * self.npoints // pos1.shape[0], replace=False)
+        # L5 = np.argwhere(surface1 == 5).squeeze()
+        # res = self.npoints - np.sum([vert_point_count[i] * self.npoints // pos1.shape[0] for i in range(4)])
+        # sample_idx5 = np.random.choice(L5, res, replace=False)
         return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
 
     def __len__(self):
