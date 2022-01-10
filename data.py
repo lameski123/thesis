@@ -421,7 +421,7 @@ class SceneflowDataset(Dataset):
                                           sample_idx5), axis=0).astype(int)
 
         else:
-            sample_idx_ = np.random.choice(pc, self.npoints, replace=False)
+            sample_idx_ = np.random.choice(pc.shape[0], self.npoints, replace=False)
             return sample_idx_
 
         if constraints is None:
@@ -514,7 +514,7 @@ class SceneflowDataset(Dataset):
         # Getting the indexes to down-sample the source and target point clouds and the updated constraints indexes
         sample_idx_source, downsampled_constraints_idx = \
             self.get_downsampled_idx(pc=source_pc, random_seed=100, constraints=constraint, sample_each_vertebra=True)
-        sample_idx_target = self.get_downsampled_idx(pc=target_pc, random_seed=20, sample_each_vertebra=True)
+        sample_idx_target = self.get_downsampled_idx(pc=target_pc, random_seed=20, sample_each_vertebra=False)
 
         # Down-sampling the point clouds
         downsampled_source_pc = source_pc[sample_idx_source, ...]
@@ -584,6 +584,7 @@ class SceneflowDataset(Dataset):
         L4 = np.argwhere(surface1 == 4).squeeze()
         sample_idx4 = np.random.choice(L4, n_points, replace=L4.shape[0] <= n_points)
         L5 = np.argwhere(surface1 == 5).squeeze()
+        n_points = self.npoints - n_points * 4  # sample the remaining points
         sample_idx5 = np.random.choice(L5, n_points, replace=L5.shape[0] <= n_points)
 
         # vert_point_count = [len(np.argwhere(surface1 == i + 1)) for i in range(5)]
