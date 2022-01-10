@@ -242,18 +242,24 @@ def find_main_axis(pc):
     return main_axis
 
 
-def add_occlusion(pc: numpy.ndarray, occlusion_ratio):
+def add_occlusion(pc: numpy.ndarray, occlusion_ratio, occlusion_start_quantile=None):
     max_one_loc_occlusion = 10
     number_of_occlusions = int((occlusion_ratio - 0.0001) // max_one_loc_occlusion + 1)  # don't occlude more than 10 percent from one location
     occluded = pc.copy()
     main_axis = find_main_axis(pc)
     min_ = np.min(occluded, axis=0)[main_axis]
     max_ = np.max(occluded, axis=0)[main_axis]
+    assert (number_of_occlusions == 1) or (occlusion_start_quantile==None), \
+        f'if number_of_occlusions is set, occlusion ration must be less than {max_one_loc_occlusion} percent'
+
     for i in range(number_of_occlusions):
         # start_z = np.random.randint(low=min_z, high=max_z, size=1)
         ratio = max_one_loc_occlusion if i < (number_of_occlusions - 1) else occlusion_ratio - (i * max_one_loc_occlusion)
         size = (max_ - min_) * ratio / 100
-        start_ = define_occlusion_indices(occluded, size, main_axis)
+        if occlusion_start_quantile is None:
+            start_ = define_occlusion_indices(occluded, size, main_axis)
+        else:
+            start_ = (max_ - min_) * occlusion_start_quantile + min_
         occluded = occluded[(occluded[:, main_axis] > start_ + size) | (occluded[:, main_axis] < start_), :]
     return occluded
 
@@ -306,6 +312,11 @@ class SceneflowDataset(Dataset):
                 last_time_stamp = 19
 
             self.data_path = [path for path in self.data_path if f'ts_{last_time_stamp}' in path]
+
+        if occlude_data and mode == 'test':
+            self.occluion_augmentation_rate = 8
+        else:
+            self.occluion_augmentation_rate = 1
 
         if "augment_test" in kwargs.keys():
             self.augment_test = kwargs["augment_test"]
@@ -488,12 +499,18 @@ class SceneflowDataset(Dataset):
         return vs_normalized, vt_normalized, tre_points
 
     def __getitem__(self, index):
-
-        file_id = os.path.split(self.data_path[index])[-1].split(".")[0]
-        constraint, flow, source_pc, target_pc = read_numpy_file(fp=self.data_path[index])
+        file_index = index // self.occluion_augmentation_rate
+        file_id = os.path.split(self.data_path[file_index])[-1].split(".")[0]
+        constraint, flow, source_pc, target_pc = read_numpy_file(fp=self.data_path[file_index])
 
         if self.occlude_data:
-            target_pc = add_occlusion(target_pc, occlusion_ratio=self.occlude_ratio)
+            if self.mode == 'test':  # in test mode occlude in fixed positions and use occlusion as augmentation
+                occlusion_start_quantile = np.linspace(start=0.1, stop=0.89, num=self.occluion_augmentation_rate)
+                occl_index = index // len(self.data_path)
+                target_pc = add_occlusion(target_pc, occlusion_ratio=self.occlude_ratio,
+                                          occlusion_start_quantile=occlusion_start_quantile[occl_index])
+            else:
+                target_pc = add_occlusion(target_pc, occlusion_ratio=self.occlude_ratio)
         # Getting the indexes to down-sample the source and target point clouds and the updated constraints indexes
         sample_idx_source, downsampled_constraints_idx = \
             self.get_downsampled_idx(pc=source_pc, random_seed=100, constraints=constraint, sample_each_vertebra=True)
@@ -504,7 +521,7 @@ class SceneflowDataset(Dataset):
         downsampled_target_pc = target_pc[sample_idx_target, ...]
         downsampled_flow = flow[sample_idx_source, :]
 
-        tre_points = self.get_tre_points(self.data_path[index])
+        tre_points = self.get_tre_points(self.data_path[file_index])
 
         # augmentation in train
         if self.mode == "train" and self.augment:
@@ -585,7 +602,7 @@ class SceneflowDataset(Dataset):
         return L1, L2, L3, L4, L5, sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5
 
     def __len__(self):
-        return len(self.data_path)
+        return len(self.data_path) * self.occluion_augmentation_rate
 
 # if __name__ == '__main__':
 #     # train = SceneflowDataset(1024)
