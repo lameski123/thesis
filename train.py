@@ -24,7 +24,7 @@ from test import test_one_epoch, test, compute_test_metrics, get_color_array
 
 args = None
 
-def train(args, net, train_loader, val_loader, textio):
+def train(args, net, train_loader, val_loader, test_loader, textio):
     if args.use_sgd:
         print("Use SGD")
         opt = optim.SGD(net.parameters(), lr=args.lr * 100, momentum=args.momentum, weight_decay=1e-4)
@@ -43,14 +43,15 @@ def train(args, net, train_loader, val_loader, textio):
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
         with torch.no_grad():
-            test_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None, max_num_batch=40)
-        test_loss = test_losses['TRE']
-        textio.cprint('mean test loss: %f' % test_loss)
-        if best_test_loss >= test_loss:
-            best_test_loss = test_loss
+            val_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None, max_num_batch=40)
+            test_loss = test_one_epoch(net, test_loader, args=args, save_results=False, wandb_table=None)
+        val_loss = val_losses['TRE']
+        textio.cprint('mean test loss: %f' % val_loss)
+        if best_test_loss >= val_loss:
+            best_test_loss = val_loss
             report_val_loss = True
             best_net = copy.deepcopy(net)
-            textio.cprint('best test loss till now: %f' % test_loss)
+            textio.cprint('best test loss till now: %f' % val_loss)
             if torch.cuda.device_count() > 1 and args.gpu_id == -1:
                 torch.save(net.module.state_dict(), f'{args.checkpoints_dir}/models/model_spine_bio.best.t7')
             else:
@@ -59,10 +60,11 @@ def train(args, net, train_loader, val_loader, textio):
         scheduler.step()
 
         if report_val_loss:
-            wandb.log({'Train': train_losses, 'Validation': test_losses, 'val_loss': test_losses[args.sweep_target_loss]})
+            wandb.log({'Train': train_losses, 'Validation': val_losses,
+                       'val_loss': val_losses[args.sweep_target_loss], 'Test': test_loss})
             report_val_loss = False
         else:
-            wandb.log({'Train': train_losses, 'Validation': test_losses})
+            wandb.log({'Train': train_losses, 'Validation': val_losses, 'Test': test_loss})
 
         args.lr = scheduler.get_last_lr()[0]
     return best_net
@@ -138,10 +140,19 @@ def run_experiment(args):
                                max_rotation=args.max_rotation, augment_test=args.augment_test,
                                occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
+
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path,
+                                raycasted=args.use_raycasted_data, data_seed=args.data_seed,
+                                test_id=args.test_id, splits=train_set.spine_splits,
+                                max_rotation=args.max_rotation, augment_test=args.augment_test,
+                                test_rotation_axis=args.test_rotation_axis, test_rotation_degree=args.max_rotation,
+                                occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
+    test_loader = DataLoader(test_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
+
     if torch.cuda.device_count() > 1 and args.gpu_id == -1:
         net = nn.DataParallel(net)
         print("Let's use", torch.cuda.device_count(), "GPUs!")
-    best_net = train(args, net, train_loader, val_loader, textio)
+    best_net = train(args, net, train_loader, val_loader, test_loader, textio)
     # test after training
     test(args, best_net, textio, spine_splits=train_set.spine_splits)
 
