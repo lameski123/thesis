@@ -42,29 +42,22 @@ def chamfer_loss(flow, flow_pred, pc1, pc2, coeff=1):
 
 
 def rigidity_loss(flow, flow_pred, pc1, position1, coeff=1):
-    source_dist1 = torch.Tensor().cuda()
-    source_dist2 = torch.Tensor().cuda()
-    predict_dist1 = torch.Tensor().cuda()
-    predict_dist2 = torch.Tensor().cuda()
+    source_point1 = torch.Tensor().cuda()
+    source_point2 = torch.Tensor().cuda()
+    predict_point1 = torch.Tensor().cuda()
+    predict_point2 = torch.Tensor().cuda()
+    dist_source = torch.Tensor().cuda()
+    dist_pred = torch.Tensor().cuda()
     for idx in range(pc1.shape[0]):
         for p1 in position1:
             p1 = p1.type(torch.int).cuda()
+            points_source = torch.index_select(pc1[idx, ...], 1, p1[idx, :]).T[None, ...]
+            dist_source = torch.cat((dist_source, torch.cdist(points_source, points_source).view(-1)), dim=0)
+            points_pred = torch.index_select(pc1[idx, ...] + flow_pred[idx, ...], 1, p1[idx, :]).T[None, ...]
+            dist_pred = torch.cat((dist_pred, torch.cdist(points_pred, points_pred).view(-1)), dim=0)
 
-            source_dist1 = torch.cat((source_dist1, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[..., None]
-                                      .expand(-1, -1, p1.size()[1]).reshape(3, -1).T), dim=0)
+    loss = F.mse_loss(dist_pred, dist_source)
 
-            source_dist2 = torch.cat((source_dist2, torch.index_select(pc1[idx, ...], 1, p1[idx, :])[None, ...]
-                                      .expand(p1.size()[1], -1, -1).reshape(3, -1).T), dim=0)
-
-            predict_dist1 = torch.cat(
-                (predict_dist1, torch.index_select(pc1[idx, ...] + flow_pred[idx, ...], 1, p1[idx, :])[..., None]
-                 .expand(-1, -1, p1.size()[1]).reshape(3, -1).T), dim=0)
-
-            predict_dist2 = torch.cat(
-                (predict_dist2, torch.index_select(pc1[idx, ...] + flow_pred[idx, ...], 1, p1[idx, :])[None, ...]
-                 .expand(p1.size()[1], -1, -1).reshape(3, -1).T), dim=0)
-    loss = torch.abs(torch.sqrt(F.mse_loss(source_dist1, source_dist2)) -
-                     torch.sqrt(F.mse_loss(predict_dist1, predict_dist2)))
     return loss * coeff
 
 
