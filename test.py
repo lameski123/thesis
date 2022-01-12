@@ -48,12 +48,13 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
     q_dist_batch = 0
     tr_dist_batch = 0
     tre_batch = 0
+    diff_tre_batch = 0
     metric_dict_list = []
     for i in range(batch_size):
 
         # error in terms of quaternion distance and translation distance. Point clouds are transposed as the function
         # expects [n_points x 3] arrays and not [3 x n_points] arrays.
-        quaternion_distance_list, translation_distance_list, tre = vertebrae_pose_error(
+        quaternion_distance_list, translation_distance_list, tre, diff_tre = vertebrae_pose_error(
             source=np.transpose(source_pc[i, ...]),
             gt_flow=np.transpose(gt_flow[i, ...]),
             predicted_flow=np.transpose(estimated_flow[i, ...]),
@@ -63,13 +64,15 @@ def compute_test_metrics(file_id, source_pc, source_color, gt_flow, estimated_fl
             "id": file_id,
             "quaternion distance": np.mean(quaternion_distance_list),
             "translation distance": np.mean(translation_distance_list),
-            "TRE": np.mean(tre)
+            "TRE": np.mean(tre),
+            "init_TRE": np.mean(diff_tre)
         })
         q_dist_batch += np.mean(quaternion_distance_list)
         tr_dist_batch += np.mean(translation_distance_list)
         tre_batch += np.mean(tre)
+        diff_tre_batch += np.mean(diff_tre)
 
-    return metric_dict_list, q_dist_batch/batch_size, tr_dist_batch/batch_size, tre_batch/batch_size
+    return metric_dict_list, q_dist_batch/batch_size, tr_dist_batch/batch_size, tre_batch/batch_size, diff_tre_batch/batch_size
 
 
 def save_metrics2csv(metric_dict_list):
@@ -139,7 +142,7 @@ def get_color_array(vertebrae_idxs):
 def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wandb.Table=None, max_num_batch=-1):
     net.eval()
     total_loss = 0
-    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
+    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total, diff_tre_total = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     quaternion_distance_total, translation_distance_total = 0.0, 0.0
 
     # Initializing the save folder if save_results is set to True
@@ -167,7 +170,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
                                                                                 ['all'], pc1, pc2, position1, args.loss_coeff.copy())
 
         timespans.append((datetime.datetime.now()-start_time).total_seconds())
-        metrics, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
+        metrics, quaternion_distance, translation_distance, tre, diff_tre = compute_test_metrics(file_id=fn,
                                                                                        source_pc=pc1,
                                                                                        source_color=source_color,
                                                                                        gt_flow=flow,
@@ -189,6 +192,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
         quaternion_distance_total += quaternion_distance / len(test_loader)
         translation_distance_total += translation_distance / len(test_loader)
         tre_total += tre / len(test_loader)
+        diff_tre_total += diff_tre / len(test_loader)
 
         total_loss += loss.item() / len(test_loader)
 
@@ -212,7 +216,7 @@ def test_one_epoch(net, test_loader, args, save_results=False, wandb_table: wand
     losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
               'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total,
               'quaternion_distance': quaternion_distance_total, 'translation_distance': translation_distance_total,
-              'TRE': tre_total}
+              'TRE': tre_total, 'TRE_diff': diff_tre_total}
 
     print(f'test duration is {np.mean(timespans)}')
 

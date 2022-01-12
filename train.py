@@ -73,7 +73,7 @@ def train(args, net, train_loader, val_loader, test_loader, textio):
 def train_one_epoch(net, train_loader, opt, loss_opt, args):
     net.train()
     total_loss = 0
-    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total = 0.0, 0.0, 0.0, 0.0, 0.0
+    mse_loss_total, bio_loss_total, rig_loss_total, chamfer_loss_total, tre_total, diff_tre_total = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     for i, data in tqdm(enumerate(train_loader), total=len(train_loader)):
         batch_data = utils.read_batch_data(data)
         if len(batch_data) == 9:
@@ -88,7 +88,7 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
                                                                                 loss_opt, pc1, pc2, position1,
                                                                                 args.loss_coeff)
-        metrics, quaternion_distance, translation_distance, tre = compute_test_metrics(file_id=fn,
+        metrics, quaternion_distance, translation_distance, tre, diff_tre = compute_test_metrics(file_id=fn,
                                                                                        source_pc=pc1,
                                                                                        source_color=source_color,
                                                                                        gt_flow=flow,
@@ -101,6 +101,7 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
         chamfer_loss_total += chamfer_loss.item() / len(train_loader)
         total_loss += loss.item() / len(train_loader)
         tre_total += tre / len(train_loader)
+        diff_tre_total += diff_tre / len(train_loader)
 
         loss.backward()
         opt.step()
@@ -108,7 +109,7 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
             utils.plot_pointcloud(flow_pred, pc1, pc2)
 
     losses = {'total_loss': total_loss, 'mse_loss': mse_loss_total, 'biomechanical_loss': bio_loss_total,
-              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total, 'TRE': tre_total}
+              'rigid_loss': rig_loss_total, 'chamfer_loss': chamfer_loss_total, 'TRE': tre_total, 'TRE_diff': diff_tre_total}
     return losses
 
 

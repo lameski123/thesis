@@ -124,6 +124,7 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow, tre_points=None):
     translation_distance_list = []
     quaternion_distance_list = []
     tre_list = []
+    impr_tre_list = []
     for vertebrae_level in range(1, 6):
         vertebra_idxes = np.argwhere(source[:, 3] == vertebrae_level).flatten()
 
@@ -140,8 +141,8 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow, tre_points=None):
         translation_distance_list.append(translation_distance)
         quaternion_distance_list.append(quaternion_distance)
 
-        if tre_points is None:
-            return quaternion_distance_list, translation_distance_list
+        # if tre_points is None:
+        #     return quaternion_distance_list, translation_distance_list
 
         # todo: check this
         vertebra_target = tre_points[tre_points[:, -1] == vertebrae_level]
@@ -153,6 +154,8 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow, tre_points=None):
         predicted_registered_target = np.matmul(predicted_T, vertebra_target)  # Nx4
         tre_error = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=0)
         tre_list.append(np.mean(tre_error))
+        init_tre_error = np.linalg.norm(gt_registered_target - vertebra_target, axis=0)
+        impr_tre_list.append(np.mean(init_tre_error - tre_error))
 
-    return quaternion_distance_list, translation_distance_list, tre_list
+    return quaternion_distance_list, translation_distance_list, tre_list, impr_tre_list
 
