@@ -61,10 +61,10 @@ def train(args, net, train_loader, val_loader, test_loader, textio):
 
         if report_val_loss:
             wandb.log({'Train': train_losses, 'Validation': val_losses,
-                       'val_loss': val_losses[args.sweep_target_loss], 'Test': test_loss})
+                       'val_loss': val_losses[args.sweep_target_loss], 'Test during training': test_loss})
             report_val_loss = False
         else:
-            wandb.log({'Train': train_losses, 'Validation': val_losses, 'Test': test_loss})
+            wandb.log({'Train': train_losses, 'Validation': val_losses, 'Test during training': test_loss})
 
         args.lr = scheduler.get_last_lr()[0]
     return best_net
