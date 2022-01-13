@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 import copy
+import datetime
 import os
 from types import SimpleNamespace
 
@@ -129,6 +130,8 @@ def run_experiment(args):
     print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
     print(f'%%% number of parameters: {utils.count_parameters(net):.3E}')
     print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+    print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+    np.random.seed(datetime.datetime.now().second + datetime.datetime.now().microsecond)
 
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
                                  raycasted=args.use_raycasted_data, augment=not args.no_augmentation,
@@ -136,6 +139,8 @@ def run_experiment(args):
                                  max_rotation=args.max_rotation, train_set_size=args.train_set_size,
                                  occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
     train_loader = DataLoader(train_set, batch_size=args.batch_size, drop_last=True, num_workers=args.num_workers)
+
+    print(train_set.spine_splits)
     val_set = SceneflowDataset(npoints=4096, mode="val", root=args.dataset_path,
                                raycasted=args.use_raycasted_data, splits=train_set.spine_splits,
                                max_rotation=args.max_rotation, augment_test=args.augment_test,
