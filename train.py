@@ -44,7 +44,7 @@ def train(args, net, train_loader, val_loader, test_loader, textio):
         textio.cprint('mean train EPE loss: %f' % train_losses['total_loss'])
 
         with torch.no_grad():
-            val_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None, max_num_batch=40)
+            val_losses = test_one_epoch(net, val_loader, args=args, wandb_table=None, max_num_batch=-1)
             test_loss = test_one_epoch(net, test_loader, args=args, save_results=False, wandb_table=None)
         val_loss = val_losses['TRE']
         textio.cprint('mean test loss: %f' % val_loss)
@@ -89,23 +89,24 @@ def train_one_epoch(net, train_loader, opt, loss_opt, args):
         bio_loss, chamfer_loss, loss, mse_loss, rig_loss = utils.calculate_loss(batch_size, constraint, flow, flow_pred,
                                                                                 loss_opt, pc1, pc2, position1,
                                                                                 args.loss_coeff)
-        metrics, quaternion_distance, translation_distance, tre, diff_tre = compute_test_metrics(file_id=fn,
+        loss.backward()
+        opt.step()
+        with torch.no_grad():
+            metrics, quaternion_distance, translation_distance, tre, diff_tre = compute_test_metrics(file_id=fn,
                                                                                        source_pc=pc1,
                                                                                        source_color=source_color,
                                                                                        gt_flow=flow,
                                                                                        estimated_flow=flow_pred.detach(),
                                                                                        tre_points=tre_points)
 
-        mse_loss_total += mse_loss.item() / len(train_loader)
-        bio_loss_total += bio_loss.item() / len(train_loader)
-        rig_loss_total += rig_loss.item() / len(train_loader)
-        chamfer_loss_total += chamfer_loss.item() / len(train_loader)
-        total_loss += loss.item() / len(train_loader)
-        tre_total += tre / len(train_loader)
-        diff_tre_total += diff_tre / len(train_loader)
+            mse_loss_total += mse_loss.item() / len(train_loader)
+            bio_loss_total += bio_loss.item() / len(train_loader)
+            rig_loss_total += rig_loss.item() / len(train_loader)
+            chamfer_loss_total += chamfer_loss.item() / len(train_loader)
+            total_loss += loss.item() / len(train_loader)
+            tre_total += tre / len(train_loader)
+            diff_tre_total += diff_tre / len(train_loader)
 
-        loss.backward()
-        opt.step()
         if i % 50 == 0 and args.wandb_sweep_id is None:  # plot only if not in sweep mode
             utils.plot_pointcloud(flow_pred, pc1, pc2)
 
@@ -130,7 +131,6 @@ def run_experiment(args):
 
     print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
     print(f'%%% number of parameters: {utils.count_parameters(net):.3E}')
-    print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
     print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
 
     train_set = SceneflowDataset(npoints=4096, mode="train", root=args.dataset_path,
