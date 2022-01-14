@@ -6,7 +6,7 @@ def create_parser():
     parser.add_argument('--exp_name', type=str, default='flownet3d', metavar='N', help='Name of the experiment')
     parser.add_argument('--model', type=str, default='flownet', metavar='N', choices=['flownet'], help='Model to use, [flownet]')
     parser.add_argument('--num_filt', type=int, default=64, metavar='N', help='Dimension of embeddings')
-    parser.add_argument('--num_points', type=int, default=4096, help='Point Number [default: 4096]')
+    parser.add_argument('--num_points', type=int, default=1024, help='Point Number in first net abstraction layer [default: 1024]')
     parser.add_argument('--dropout', type=float, default=0.5, metavar='N', help='Dropout ratio in transformer')
     parser.add_argument('--batch_size', type=int, default=4, metavar='batch_size', help='Size of batch)')
     parser.add_argument('--test_batch_size', type=int, default=4, metavar='batch_size', help='Size of batch)')

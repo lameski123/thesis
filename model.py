@@ -15,8 +15,6 @@ class FlowNet3D(nn.Module):
     def __init__(self,args):
         super(FlowNet3D, self).__init__()
 
-        self.num_points = args.num_points
-
         RADIUS1 = 5.0
         RADIUS2 = 10.0
         RADIUS3 = 17.5
@@ -24,11 +22,13 @@ class FlowNet3D(nn.Module):
 
         num_filt = args.num_filt
 
-        self.sa1 = PointNetSetAbstraction(npoint=1024, radius=RADIUS1, nsample=16, in_channel=3, mlp=[num_filt//2, num_filt//2, num_filt], group_all=False)
-        self.sa2 = PointNetSetAbstraction(npoint=256, radius=RADIUS2, nsample=16, in_channel=num_filt, mlp=[num_filt, num_filt, num_filt * 2], group_all=False)
+        n_points = args.num_points
 
-        self.sa3 = PointNetSetAbstraction(npoint=64, radius=RADIUS3, nsample=8, in_channel=num_filt * 2, mlp=[num_filt * 2, num_filt * 2, num_filt * 4], group_all=False)
-        self.sa4 = PointNetSetAbstraction(npoint=16, radius=RADIUS4, nsample=8, in_channel=num_filt * 4, mlp=[num_filt * 4, num_filt * 4, num_filt * 8], group_all=False)
+        self.sa1 = PointNetSetAbstraction(npoint=n_points, radius=RADIUS1, nsample=16, in_channel=3, mlp=[num_filt//2, num_filt//2, num_filt], group_all=False)
+        self.sa2 = PointNetSetAbstraction(npoint=n_points//4, radius=RADIUS2, nsample=16, in_channel=num_filt, mlp=[num_filt, num_filt, num_filt * 2], group_all=False)
+
+        self.sa3 = PointNetSetAbstraction(npoint=n_points//16, radius=RADIUS3, nsample=8, in_channel=num_filt * 2, mlp=[num_filt * 2, num_filt * 2, num_filt * 4], group_all=False)
+        self.sa4 = PointNetSetAbstraction(npoint=n_points//64, radius=RADIUS4, nsample=8, in_channel=num_filt * 4, mlp=[num_filt * 4, num_filt * 4, num_filt * 8], group_all=False)
 
         self.fe_layer = FlowEmbedding(radius=10.0, nsample=64, in_channel=num_filt * 2, mlp=[num_filt * 2, num_filt * 2, num_filt * 2], pooling='max', corr_func='concat', knn=True)
 
