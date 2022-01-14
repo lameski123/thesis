@@ -45,4 +45,5 @@ def create_parser():
     parser.add_argument('--train_set_size', type=int, default=None, help='set to use the subset of the training set')
     parser.add_argument('--occlude_data', action='store_true', help='occlude data by removing points from the PC')
     parser.add_argument('--occlude_ratio', type=int, default=0, metavar='S', help='Percentage of data to occlude')
+    parser.add_argument('--n_points_denominator', nargs="+", type=int, default=[4, 16, 64])
     return parser

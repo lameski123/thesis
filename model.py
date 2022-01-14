@@ -23,7 +23,7 @@ class FlowNet3D(nn.Module):
         num_filt = args.num_filt
 
         n_points = args.num_points
-        n_points_denominator = [4, 8, 16]
+        n_points_denominator = args.n_points_denominator
 
         self.sa1 = PointNetSetAbstraction(npoint=n_points, radius=RADIUS1, nsample=16, in_channel=3, mlp=[num_filt//2, num_filt//2, num_filt], group_all=False)
         self.sa2 = PointNetSetAbstraction(npoint=n_points//n_points_denominator[0], radius=RADIUS2, nsample=16, in_channel=num_filt, mlp=[num_filt, num_filt, num_filt * 2], group_all=False)
