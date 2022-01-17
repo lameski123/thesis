@@ -22,6 +22,7 @@ def create_parser():
     parser.add_argument('--gaussian_noise', type=bool, default=False, metavar='N', help='Wheter to add gaussian noise')
     parser.add_argument('--dataset', type=str, default='SceneflowDataset', choices=['SceneflowDataset'], metavar='N', help='dataset to use')
     parser.add_argument('--dataset_path', type=str, default='./spine_clouds', metavar='N', help='dataset to use')
+    parser.add_argument('--test_dataset_path', type=str, default=None, metavar='N', help='test dataset to use')
     parser.add_argument('--augment_test', action='store_true', help='augment test data with rotation')
     parser.add_argument('--max_rotation', type=float, default=20, metavar='M', help='maximum rotation degree (default: 20)')
     parser.add_argument('--test_rotation_axis', type=str, choices=['x', 'y', 'z'], default=None, help='around which axis to rotate the data [default: None]')

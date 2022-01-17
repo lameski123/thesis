@@ -98,6 +98,9 @@ def update_args(args):
     if args.test_output_path is None:
         args.test_output_path = args.checkpoints_dir
 
+    if args.test_dataset_path is None:
+        args.test_dataset_path = args.dataset_path
+
     return args
 
 

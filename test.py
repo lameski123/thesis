@@ -267,7 +267,7 @@ def main():
 
 def test(args, net, textio, spine_splits=None):
 
-    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path,
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.test_dataset_path,
                                 raycasted=args.use_raycasted_data, data_seed=args.data_seed,
                                 test_id=args.test_id, splits=spine_splits,
                                 max_rotation=args.max_rotation, augment_test=args.augment_test,

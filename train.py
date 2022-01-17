@@ -147,7 +147,7 @@ def run_experiment(args):
                                occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
     val_loader = DataLoader(val_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
 
-    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.dataset_path,
+    test_set = SceneflowDataset(npoints=4096, mode="test", root=args.test_dataset_path,
                                 raycasted=args.use_raycasted_data, data_seed=args.data_seed,
                                 test_id=args.test_id, splits=train_set.spine_splits,
                                 max_rotation=args.max_rotation, augment_test=args.augment_test,
