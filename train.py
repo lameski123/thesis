@@ -119,8 +119,8 @@ def run_experiment(args):
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(100)
     torch.cuda.manual_seed_all(100)
-    # np.random.seed(100)
-    np.random.seed(datetime.datetime.now().second + datetime.datetime.now().microsecond)
+    np.random.seed(100)
+    # np.random.seed(datetime.datetime.now().second + datetime.datetime.now().microsecond)
     utils.create_paths(args)
     textio = utils.IOStream(os.path.join(args.checkpoints_dir, 'run.log'))
     textio.cprint(str(args))
