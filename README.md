@@ -39,6 +39,24 @@ we need the cuda exec. to compile the libraries. so we should pull a `devel` ima
 
 the code is tested on `pytorch/pytorch:1.9.0-cuda11.1-cudnn8-devel`.
 
+## After building the image to run locally or on the cluster:
+
+First run the container:
+
+`docker run -i -t --mount src=/home/farid/spine_flownet,target=/src,type=bind --mount src=/mnt/polyaxon/,target=/mnt/polyaxon/,type=bind  --shm-size=10g --entrypoint bash -u 0 mfazampour/spine_flownet`
+
+then install the missing libraries:
+
+`pip install matplotlib pyquaternion`
+
+go to source code:
+
+`cd /src/`
+
+and finally:
+
+`python train.py --wandb_key d3424a60f5e39087781fde8ff973ee92dd6da70d --epoch 60 --use_raycasted_data
+--batch_size 35 --gpu_id 1 --loss mse,biomechanical --test_id 1 --dataset_path /mnt/polyaxon/data1/Spine_Flownet/new_data_raycasted_cpd_initialized_real_paired --coeff_rigidity 5.0 --num_points 2048 --no_augmentation --coeff_bio 0.5`
 
 # Data Generation
 
