@@ -3,6 +3,7 @@
 
 
 import os
+import re
 import sys
 import glob
 import h5py
@@ -431,6 +432,10 @@ class SceneflowDataset(Dataset):
         # points which will be deleted from the source point indexes to make space for the constraints
 
         # 2.a) Removing K points from the point cloud, with K = N constraints
+        if constraints.__len__() > sample_idx_.shape[0] // 4:  # at most 25% of vertebral point can be removed for the constraints
+            choice = np.random.choice(constraints.__len__(), int(sample_idx_.shape[0] // 4))
+            constraints = constraints[choice]
+
         pc_lengths = [item.size for item in [sample_idx1, sample_idx2, sample_idx3, sample_idx4, sample_idx5]]
         pc_idx_centers = [np.sum(pc_lengths[0:i + 1]) - pc_lengths[i] // 2 for i in range(5)]
         constraints_per_vertebra = [len(np.where(pc[constraints, -1] == i)[0]) for i in range(1, 6)]
@@ -650,3 +655,189 @@ class SceneflowDataset(Dataset):
 #
 #     print(time.time() - tic)
 #     print(pc1.shape, type(pc1))
+
+
+class VerseFlowDataset(SceneflowDataset):
+    def __init__(self, npoints=4096, root='/mnt/polyaxon/data1/Spine_Flownet/raycastedSpineClouds/', mode="train",
+                 raycasted=False, augment=True, data_seed=0, test_id=None, splits=None,
+                 train_set_size: int = None, occlude_data=False, occlude_ratio=0, **kwargs):
+
+        """
+                :param npoints: number of points of input point clouds
+                :param root: folder of data in .npz format
+                :param mode: mode can be any of the "train", "test" and "validation"
+                :param raycasted: the data used is raycasted or full vertebras
+                :param raycasted: the data used is raycasted or full vertebrae
+                :param augment: if augment data for training
+                :param data_seed: which permutation to use for slicing the dataset
+                """
+
+        if mode not in ["train", "val", "test"]:
+            raise Exception(f'dataset mode is {mode}. mode can be any of the "train", "test" and "validation"')
+
+        self.npoints = npoints
+        self.mode = mode
+        self.root = root
+        self.raycasted = raycasted
+        self.augment = augment
+        self.occlude_data = occlude_data
+        self.occlude_ratio = occlude_ratio
+        self.data_path = glob.glob(os.path.join(self.root, '*.npz'))
+
+        self.use_target_normalization_as_feature = True
+
+        if splits is None:
+            if test_id is None:
+                train_idx, val_idx, test_idx = self._get_sets_indices(seed=data_seed)
+            else:
+                train_idx, val_idx, test_idx = self._leave_one_out_indices(test_id)
+            self.spine_splits = {"train": train_idx, "val": val_idx, "test": test_idx}
+        else:  # already divided the data
+            self.spine_splits = splits
+        # if mode == "train" and train_set_size is not None:
+        #     self.spine_splits[mode] = self.spine_splits[mode][:train_set_size]
+        self.data_path = [path for path in self.data_path if self._get_spine_number(path) in self.spine_splits[self.mode]]
+
+        if occlude_data and mode == 'test':
+            self.occluion_augmentation_rate = 8
+        else:
+            self.occluion_augmentation_rate = 1
+
+        if "augment_test" in kwargs.keys():
+            self.augment_test = kwargs["augment_test"]
+            if "test_rotation_degree" in kwargs.keys() and "test_rotation_axis" in kwargs.keys():
+                self.test_rotation_degree = kwargs["test_rotation_degree"]
+                self.test_rotation_axis = kwargs["test_rotation_axis"]
+            else:
+                self.test_rotation_degree = None
+                self.test_rotation_axis = None
+        else:
+            self.augment_test = False
+            self.test_rotation_degree = None
+            self.test_rotation_axis = None
+
+        if "max_rotation" in kwargs.keys():
+            self.max_rotation = kwargs['max_rotation']
+        else:
+            self.max_rotation = 20.0
+
+    def _get_sets_indices(self, seed: int, num_spines=4):
+
+        assert seed >= 0 and seed < 5, 'we have only 5 different sets for indices'
+
+        all_indices = [500, 533, 581, 504, 534, 586, 506, 535, 588, 507, 536, 619, 510, 537, 629, 514, 539, 631, 518,
+                       541, 642, 519, 542, 646, 521, 557, 807, 525, 564, 808, 527, 565, 811, 532, 577]
+
+        np.random.seed(1000)
+        indices = np.stack([np.random.choice(all_indices, len(all_indices), replace=False) for _ in range(5)], axis=0)
+
+        # indices = np.asarray([[539, 534, 514, 506, 527, 535, 521, 564, 532, 542, 519, 500, 557, 565, 577, 536, 533, 541, 518],
+        #                       [514, 535, 557, 536, 532, 506, 564, 542, 539, 533, 527, 565, 541, 577, 519, 532, 518, 500, 521],
+        #                       [565, 527, 535, 539, 533, 506, 514, 557, 542, 536, 532, 541, 519, 500, 564, 518, 577, 521, 534],
+        #                       [532, 514, 518, 539, 506, 535, 557, 533, 564, 542, 521, 527, 500, 536, 577, 534, 541, 519, 565],
+        #                       [500, 506, 514, 519, 532, 534, 536, 539, 542, 565, 557, 518, 521, 541, 577, 527, 533, 535, 564]])
+
+        return indices[seed, :-6], indices[seed, -6:-3], indices[seed, -3:]
+
+    def _get_spine_number(self, path: str):
+        match = re.search(r"verse(\d+)", path)
+
+        if match:
+            verse_number = int(match.group(1))
+            return verse_number
+        else:
+            return -1
+
+
+    def get_tre_points(self, spine_id, folder):
+        """
+        Loading the points position for TRE error computation in testing. They are saved in the same folder as the
+        data as facet_verse + spine_id.txt.
+        :param filename: The input filename
+        """
+        # Example: filename = some_fold/facet_verse507.txt
+
+        filename = os.path.join(folder, f"facet_verse{spine_id}.txt")
+
+        # # --> spine_id = spine22
+        # spine_id = [item for item in filename.split("_") if "spine" in item][0]
+        #
+        # # todo: remove this in future, only for wrongly named data
+        # spine_id = spine_id.replace("raycasted", "")
+        # spine_id = spine_id.replace("ts", "")
+        #
+        # # --> target_points_filepath = self.root/spine22_facet_targets.txt
+        # target_points_filepath = os.path.join(self.root, spine_id + "_facet_targets.txt")
+
+        return np.loadtxt(filename)
+
+    def __getitem__(self, index):
+        file_index = index // self.occluion_augmentation_rate
+        file_id = os.path.split(self.data_path[file_index])[-1].split(".")[0]
+        constraint, flow, source_pc, target_pc = read_numpy_file(fp=self.data_path[file_index])
+
+        if self.occlude_data:
+            if self.mode == 'test':  # in test mode occlude in fixed positions and use occlusion as augmentation
+                occlusion_start_quantile = np.linspace(start=0.1, stop=0.89, num=self.occluion_augmentation_rate)
+                occl_index = index // len(self.data_path)
+                target_pc = add_occlusion(target_pc, occlusion_ratio=self.occlude_ratio,
+                                          occlusion_start_quantile=occlusion_start_quantile[occl_index])
+            else:
+                target_pc = add_occlusion(target_pc, occlusion_ratio=self.occlude_ratio)
+        # Getting the indexes to down-sample the source and target point clouds and the updated constraints indexes
+        sample_idx_source, downsampled_constraints_idx = \
+            self.get_downsampled_idx(pc=source_pc, random_seed=100, constraints=constraint, sample_each_vertebra=True)
+        sample_idx_target = self.get_downsampled_idx(pc=target_pc, random_seed=20, sample_each_vertebra=False)
+
+        # Down-sampling the point clouds
+        downsampled_source_pc = source_pc[sample_idx_source, ...]
+        downsampled_target_pc = target_pc[sample_idx_target, ...]
+        downsampled_flow = flow[sample_idx_source, :]
+
+        spine_id = self._get_spine_number(self.data_path[file_index])
+        tre_points = self.get_tre_points(spine_id, self.root)
+
+        # augmentation in train
+        if self.mode == "train" and self.augment:
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
+                augment_data(downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points,
+                             augmentation_prob=0.5, max_rotation=self.max_rotation)
+
+        if (self.mode == "test" or self.mode == "val") and self.augment_test:
+            downsampled_flow, downsampled_source_pc, downsampled_target_pc, tre_points = \
+                augment_test(flow=downsampled_flow,
+                             pc1=downsampled_source_pc,
+                             pc2=downsampled_target_pc,
+                             tre_points=tre_points,
+                             rotation=self.test_rotation_degree,
+                             axis=self.test_rotation_axis,
+                             max_rotation=self.max_rotation)
+
+        # Normalizing the point clouds - this returns a 6D vector (compared to Fu paper we remove the 7th dimension
+        # as it is meaningless in our case). The normalization is not affecting the flow, as the normalization is only
+        # applying a translation
+        normalized_source_pc, normalized_target_pc, tre_points = \
+            self.normalize_data(source_pc=downsampled_source_pc[..., :3],
+                                target_pc=downsampled_target_pc[..., :3],
+                                tre_points=tre_points)
+
+        if self.use_target_normalization_as_feature:
+            pc1 = normalized_source_pc[..., :3]
+            pc2 = normalized_target_pc[..., :3]
+            feature1 = normalized_source_pc[..., 3:]
+            feature2 = normalized_target_pc[..., 3:]
+        else:
+            pc1 = np.copy(normalized_source_pc)
+            pc2 = np.copy(normalized_target_pc)
+            feature1 = np.ones((normalized_source_pc.shape[0],))
+            feature2 = np.ones((normalized_source_pc.shape[0],))
+
+
+        # getting the vertebrae indexes needed to compute the losses
+        L1_source, L2_source, L3_source, L4_source, L5_source = vertebrae_surface(downsampled_source_pc[..., 3])
+        vertebrae_point_inx_src = [L1_source, L2_source, L3_source, L4_source, L5_source]
+
+        mask = np.ones([self.npoints])
+
+        return pc1, pc2, feature1, feature2, downsampled_flow, mask, np.array(downsampled_constraints_idx), \
+                    vertebrae_point_inx_src, [], file_id, tre_points

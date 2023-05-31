@@ -1,6 +1,6 @@
 import time
 
-from data import SceneflowDataset
+from data import SceneflowDataset, VerseFlowDataset
 import argparse
 from constrained_cpd.BiomechanicalCPD import BiomechanicalCpd
 import numpy as np
@@ -17,8 +17,8 @@ def get_closest_points(pc1, pc2):
     """
     returns the points of pc1 which are closest to pc2
     """
-    kdtree=KDTree(pc1[:,:3])
-    dist, ind =kdtree.query(pc2[:,:3], 1)
+    kdtree = KDTree(pc1[:, :3])
+    dist, ind = kdtree.query(pc2[:, :3], 1)
     ind = ind.flatten()
     points = pc1[ind, ...]
 
@@ -26,10 +26,9 @@ def get_closest_points(pc1, pc2):
 
 
 def visualize(iteration, error, X, Y, ax):
-
     plt.cla()
-    ax.scatter(X[:, 0],  X[:, 1], X[:, 2], color='red', alpha=0.1)
-    ax.scatter(Y[:, 0],  Y[:, 1], Y[:, 2], color='blue', alpha=0.1)
+    ax.scatter(X[:, 0], X[:, 1], X[:, 2], color='red', alpha=0.1)
+    ax.scatter(Y[:, 0], Y[:, 1], Y[:, 2], color='blue', alpha=0.1)
     ax.text2D(0.87, 0.92, 'Iteration: {:d}\nQ: {:06.4f}'.format(
         iteration, error), horizontalalignment='center', verticalalignment='center', transform=ax.transAxes,
               fontsize='x-large')
@@ -49,7 +48,7 @@ def get_connected_idxes(constraint):
     """
     constrain_pairs = []
     for j in range(0, len(constraint) - 1, 2):
-        constrain_pairs.append((constraint[j], constraint[j+1]))
+        constrain_pairs.append((constraint[j], constraint[j + 1]))
 
     return constrain_pairs
 
@@ -135,7 +134,6 @@ def run_registration(cpd_method, with_callback=False):
 
 
 def get_result_dict(source, gt_flow, predicted_pc, predicted_T, tre_points, position=None):
-
     result = []
 
     if position is None:
@@ -143,7 +141,6 @@ def get_result_dict(source, gt_flow, predicted_pc, predicted_T, tre_points, posi
         tre_points[:, -1] = 1
 
     for i, vertebral_level_idxes in enumerate(position):
-
         # 2.a Extracting the points belonging to the first vertebra
         current_vertebra = source[vertebral_level_idxes, ...]
         current_flow = gt_flow[vertebral_level_idxes, ...]
@@ -156,7 +153,7 @@ def get_result_dict(source, gt_flow, predicted_pc, predicted_T, tre_points, posi
         chamfer_dist = np_chamfer_distance(current_vertebra + current_flow, predicted_vertebra)
 
         # computing tre loss
-        vertebra_target = tre_points[tre_points[:, -1] == i+1]
+        vertebra_target = tre_points[tre_points[:, -1] == i + 1]
         vertebra_target[:, -1] = 1  # making the points homogeneous
         vertebra_target = np.transpose(vertebra_target)
         gt_registered_target = np.matmul(gt_T, vertebra_target)  # Nx4
@@ -166,21 +163,19 @@ def get_result_dict(source, gt_flow, predicted_pc, predicted_T, tre_points, posi
         wandb.log({"TRE": np.mean(tre)})
         print("tre: ", np.mean(tre))
 
-        result.append( { 'mse loss': mse_loss,
-                         'Chamfer Distance': chamfer_dist,
-                         'translation distance': translation_distance,
-                         'quaternion distance': quaternion_distance,
-                         'TRE': np.mean(tre)})
+        result.append({'mse loss': mse_loss,
+                       'Chamfer Distance': chamfer_dist,
+                       'translation distance': translation_distance,
+                       'quaternion distance': quaternion_distance,
+                       'TRE': np.mean(tre)})
 
     return result
 
 
 def preprocess_input(source_pc, gt_flow, position1, constrain_pairs, tre_points):
-
     vertebra_dict = []
 
     for i, vertebral_level_idxes in enumerate(position1):
-
         # 2.a Extracting the points belonging to the first vertebra
         current_vertebra = source_pc[vertebral_level_idxes, ...]
         current_flow = gt_flow[vertebral_level_idxes, ...]
@@ -197,7 +192,7 @@ def preprocess_input(source_pc, gt_flow, position1, constrain_pairs, tre_points)
         gt_T = get_gt_transform(source_pc=current_vertebra,
                                 gt_flow=current_flow)
 
-        tre_point = tre_points[tre_points[:, -1] == i+1, :]
+        tre_point = tre_points[tre_points[:, -1] == i + 1, :]
 
         vertebra_dict.append({'source': current_vertebra,
                               'gt_flow': current_flow,
@@ -209,7 +204,6 @@ def preprocess_input(source_pc, gt_flow, position1, constrain_pairs, tre_points)
 
 
 def save_data(data_dict, save_path, postfix=""):
-
     if not os.path.exists(os.path.join(save_path, postfix)):
         os.makedirs(os.path.join(save_path, postfix))
 
@@ -253,7 +247,6 @@ def append_avg_metrics(result_list):
 
 
 def save_training_data(save_folder, data_id, source, deformed_source, original_flow, target, constraint, tre=None):
-
     gt_deformed_source = source + original_flow
     source = np.copy(deformed_source)
     new_flow = gt_deformed_source - deformed_source
@@ -271,11 +264,10 @@ def save_training_data(save_folder, data_id, source, deformed_source, original_f
 
 
 def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
-
     # ##############################################################################################################
     # ############################################## Getting the data ##############################################
     # ##############################################################################################################
-    source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name, tre_points\
+    source_pc, target_pc, color1, color2, gt_flow, mask1, constraint, position1, position2, file_name, tre_points \
         = data_batch
     constrain_pairs = get_connected_idxes(constraint)
     for i, item in enumerate(constrain_pairs):
@@ -295,11 +287,11 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
     try:
         source_pc_it1, predicted_T_it1 = run_registration(cpd_method, with_callback=plot_iterations)
     except:
-        return [{ 'mse loss': np.nan,
-                         'Chamfer Distance': np.nan,
-                         'translation distance': np.nan,
-                         'quaternion distance': np.nan,
-                         'TRE': np.nan}]
+        return [{'mse loss': np.nan,
+                 'Chamfer Distance': np.nan,
+                 'translation distance': np.nan,
+                 'quaternion distance': np.nan,
+                 'TRE': np.nan}]
     # save_training_data(save_folder="E:/NAS/jane_project/pre_initialized_rigid_cpd",
     #                    data_id = file_name,
     #                    source = source_pc,
@@ -378,7 +370,7 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
                              'gt_flow_v' + str(i): vertebra_dict[i]['gt_flow'],
                              'predicted_pc_v' + str(i): predicted_pc,
                              'predicted_gt_v' + str(i): predicted_gt,
-                             'moved_source_v'+ str(i): source_pc_it2,  # sanity check
+                             'moved_source_v' + str(i): source_pc_it2,  # sanity check
                              'predicted_T_v' + str(i): overall_T,
                              },
                   save_path=os.path.join(save_path, file_name))
@@ -400,7 +392,6 @@ def run_cpd(data_batch, save_path, cpd_iterations=100, plot_iterations=False):
 
 
 def main(dataset_path, save_path, cpd_iterations, rot_degree, rot_axis, wandb_key=None, wandb_name=""):
-
     wandb.login(key=wandb_key)
     wandb.init(project='spine_flownet')  # , mode = "disabled"
     wandb.run.name = wandb_name
@@ -409,7 +400,7 @@ def main(dataset_path, save_path, cpd_iterations, rot_degree, rot_axis, wandb_ke
     columns = ['id', 'mse loss', 'Chamfer Distance', 'quaternion distance', 'translation distance', 'TRE']
     test_table = wandb.Table(columns=columns)
 
-    test_set = SceneflowDataset(mode="test",
+    test_set = VerseFlowDataset(mode="test",
                                 root=dataset_path,
                                 raycasted=True,
                                 augment_test=True,
@@ -419,11 +410,10 @@ def main(dataset_path, save_path, cpd_iterations, rot_degree, rot_axis, wandb_ke
 
     results = []
     for i, data in enumerate(test_set):
-
         results.append(run_cpd(data_batch=data,
                                save_path=save_path,
                                cpd_iterations=cpd_iterations,
-                               plot_iterations=True))
+                               plot_iterations=False))
 
     results = append_avg_metrics(results)
 
@@ -437,21 +427,21 @@ def main(dataset_path, save_path, cpd_iterations, rot_degree, rot_axis, wandb_ke
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Data generation testing')
-    #parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
+    # parser.add_argument('--dataset_path', type=str, default="./raycastedSpineClouds")
     parser.add_argument('--dataset_path', type=str, default="E:/NAS/jane_project/npz_data_raycasted")
-    parser.add_argument('--wandb-key', type=str, required=True)
+    parser.add_argument('--wandb_key', type=str, required=True)
     parser.add_argument('--cpd-iterations', type=int, default=100)
     parser.add_argument('--save_path', type=str, default="./raycastedCPDRes")
 
     args = parser.parse_args()
-    #for cpd_iterations in range(10, 100, 10):
+    # for cpd_iterations in range(10, 100, 10):
 
     for axis in ["x", "y", "z"]:
-        for rotation in [-90, -70, -50, -20]:
+        for rotation in [0, -20, -10]:
             main(dataset_path=args.dataset_path,
                  save_path=args.save_path,
                  cpd_iterations=20,
                  rot_degree=rotation,
                  rot_axis=axis,
                  wandb_key=args.wandb_key,
-                 wandb_name = "cpd-rot" + str(rotation) + "-axis-" + axis)
+                 wandb_name="cpd-rot" + str(rotation) + "-axis-" + axis)

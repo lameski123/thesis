@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 import utils
 from test_utils import *
-from data import SceneflowDataset
+from data import SceneflowDataset, VerseFlowDataset
 from model import FlowNet3D, FlowNet3DLegacy
 
 
@@ -268,6 +268,34 @@ def main():
 def test(args, net, textio, spine_splits=None):
 
     test_set = SceneflowDataset(npoints=4096, mode="test", root=args.test_dataset_path,
+                                raycasted=args.use_raycasted_data, data_seed=args.data_seed,
+                                test_id=args.test_id, splits=spine_splits,
+                                max_rotation=args.max_rotation, augment_test=args.augment_test,
+                                test_rotation_axis=args.test_rotation_axis, test_rotation_degree=args.max_rotation,
+                                occlude_data=args.occlude_data, occlude_ratio=args.occlude_ratio)
+    test_loader = DataLoader(test_set, batch_size=1, drop_last=False, num_workers=args.num_workers)
+
+    test_data_at = wandb.Artifact("test_samples_" + str(wandb.run.id), type="predictions")
+
+    columns = ['id', "mse loss", "biomechanical loss", "Chamfer loss", 'rigidity loss',
+               'quaternion distance', 'translation distance', 'TRE']
+    test_table = wandb.Table(columns=columns)
+
+    with torch.no_grad():
+        test_loss = test_one_epoch(net, test_loader, args=args, save_results=True, wandb_table=test_table)
+
+    wandb.log({'Test': test_loss})
+
+    textio.cprint('==FINAL TEST==')
+    textio.cprint(f'mean test loss: {test_loss}')
+
+    test_data_at.add(test_table, "test prediction")
+    wandb.run.log_artifact(test_data_at)
+
+
+def test_verse20(args, net, textio, spine_splits=None):
+
+    test_set = VerseFlowDataset(npoints=4096, mode="test", root=args.test_dataset_path,
                                 raycasted=args.use_raycasted_data, data_seed=args.data_seed,
                                 test_id=args.test_id, splits=spine_splits,
                                 max_rotation=args.max_rotation, augment_test=args.augment_test,
