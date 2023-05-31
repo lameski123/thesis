@@ -86,6 +86,8 @@ def update_args(args):
     try:
         from polyaxon_client.tracking import Experiment
         args.checkpoints_dir = Experiment().get_outputs_path()
+        if '/mnt' in args.dataset_path:
+            args.dataset_path = args.dataset_path.replace('/mnt/polyaxon/data1/', '/data/')
         print("You are running on the cluster :)")
         print(args)
     except Exception as e:
