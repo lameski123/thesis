@@ -155,7 +155,7 @@ def vertebrae_pose_error(source, gt_flow, predicted_flow, tre_points=None):
         tre_error = np.linalg.norm(gt_registered_target - predicted_registered_target, axis=0)
         tre_list.append(np.mean(tre_error))
         init_tre_error = np.linalg.norm(gt_registered_target - vertebra_target, axis=0)
-        impr_tre_list.append(np.mean(init_tre_error - tre_error))
+        impr_tre_list.append(np.mean((init_tre_error - tre_error)/init_tre_error))  # calculate the percentage of improvement
 
     return quaternion_distance_list, translation_distance_list, tre_list, impr_tre_list
 
